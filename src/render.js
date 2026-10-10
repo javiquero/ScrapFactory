@@ -45,7 +45,7 @@ export class Renderer {
     const g = this.ground;
     g.clear();
     const rand = rng(state.seed ^ 0x9e3779b9);
-    const greens = [0x8cc56a, 0x86c064, 0x91ca70, 0x82bb60];
+    const greens = [0x8cc56a, 0x89c267, 0x8fc86d, 0x87c065];
     for (let y = 0; y < MAP_H; y++) {
       for (let x = 0; x < MAP_W; x++) {
         g.rect(x * T, y * T, T, T).fill(greens[Math.floor(rand() * greens.length)]);
@@ -54,14 +54,21 @@ export class Renderer {
     // rejilla suave para saber dónde cae cada cosa
     for (let x = 0; x <= MAP_W; x++) g.moveTo(x * T, 0).lineTo(x * T, MAP_H * T);
     for (let y = 0; y <= MAP_H; y++) g.moveTo(0, y * T).lineTo(MAP_W * T, y * T);
-    g.stroke({ width: 1.5, color: 0x2f5a2a, alpha: 0.12 });
+    g.stroke({ width: 1.5, color: 0x2f5a2a, alpha: 0.1 });
+    // matas de hierba sueltas
+    for (let i = 0; i < MAP_W * MAP_H * 0.6; i++) {
+      const x = rand() * MAP_W * T, y = rand() * MAP_H * T;
+      g.moveTo(x - 4, y).lineTo(x - 2, y - 7).moveTo(x, y).lineTo(x, y - 9).moveTo(x + 4, y).lineTo(x + 2, y - 7);
+    }
+    g.stroke({ width: 2, color: 0x5f9e48, alpha: 0.45 });
     // borde del mapa
     g.rect(0, 0, MAP_W * T, MAP_H * T).stroke({ width: 8, color: 0x2f5a2a, alpha: 0.35 });
 
     this.nodeLayer.removeChildren().forEach((c) => c.destroy());
     for (const k in state.world.nodes) {
       const [x, y] = k.split(',').map(Number);
-      const s = new Sprite(this.tx['node_' + state.world.nodes[k]]);
+      const type = state.world.nodes[k];
+      const s = new Sprite(this.tx[`node_${type}_${(x * 7 + y * 13) % 3}`] || this.tx['node_' + type]);
       s.position.set(x * T, y * T);
       this.nodeLayer.addChild(s);
     }

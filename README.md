@@ -42,7 +42,7 @@ Cada push a `main` se despliega solo en Vercel.
 | `src/state.js` | Estado de la partida y las **acciones** (único punto que lo modifica). |
 | `src/sim.js` | Simulación de cintas y máquinas, paso fijo y determinista. |
 | `src/world.js` | Generación del mapa a partir de una semilla. |
-| `src/textures.js` | Gráficos provisionales dibujados con código. Se cambiarán por sprites de verdad. |
+| `src/textures.js` | Gráficos dibujados con código, estilo propio "trastos remendados". |
 | `src/render.js` | Pintado con PixiJS y cámara. |
 | `src/input.js` | Gestos táctiles y de ratón. |
 | `src/ui.js`, `src/messages.js` | Interfaz y comunicados de Chatarrex S.A. |

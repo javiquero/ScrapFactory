@@ -9,12 +9,12 @@ Responder y comentar en español. Los textos del juego, en español con humor co
 - Aquí NO van plátanos ni monos: esa directiva del proyecto es para los otros juegos. De momento solo se extrae chatarra. Idea a futuro: algún gas o líquido para tratar la chatarra.
 - Controles: tocar un edificio lo gira; mantenerlo pulsado abre la ficha de girar/quitar.
 - Web, móvil primero, desplegado en Vercel desde `main`. Sin paso de compilación.
-- Sprites 2D con PixiJS v8 (vendorizado en `vendor/pixi.min.mjs`). Gráficos provisionales en `src/textures.js`; el arte final se cambiará manteniendo las mismas claves de textura.
+- Sprites 2D con PixiJS v8 (vendorizado en `vendor/pixi.min.mjs`), dibujados con código en `src/textures.js`.
+- Estilo visual propio "trastos remendados": redondeado (no pixel art), contorno marrón oscuro, pastel sobre el verde del planeta, parches atornillados. Inspirarse en packs de itch.io pero sin copiar su aspecto ni los recursos típicos de Factorio (nada de carbón/hierro/cobre).
 - Interfaz táctil: barra rápida abajo + catálogo que se despliega desde la derecha. La orientación (vertical/horizontal) no está decidida: el diseño tiene que aguantar ambas.
 - Un jugador primero. El multijugador colaborativo vendrá después (WebSockets).
 
 - Ritmos cuadrados (ver tabla del README): al mismo nivel, 2 extractores llenan 1 cinta, 1 cinta llena alimenta 1 prensa y 1 prensa alimenta 1 ensambladora. Las mejoras son por tipo de edificio y globales, se ganan con pedidos (×1 / ×1,5 / ×2). Si se cambia un número, mantener esa proporción y pasar `tests/sim.test.mjs`, que la comprueba.
-- Arte: candidatos en itch.io (Tiny Factory de mwaayk como favorito). Claude no puede descargar de itch.io: Javi adjunta el .zip.
 
 ## Regla de arquitectura
 
