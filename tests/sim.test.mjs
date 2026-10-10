@@ -1,7 +1,8 @@
 // Pruebas de la simulación sin navegador: node tests/sim.test.mjs
 import assert from 'node:assert/strict';
 import { createGame, applyAction, serialize, deserialize, currentOrder, isShip } from '../src/state.js';
-import { step } from '../src/sim.js';
+import { step, tryInsert } from '../src/sim.js';
+import { isStuck, rescueCount } from '../src/rescue.js';
 import { key } from '../src/world.js';
 import { TICK_RATE, beltRate, extractorRate, PLANETS, BUILDINGS, ITEMS, LEVEL_MULT, upgradeCost } from '../src/defs.js';
 import { beltShape } from '../src/beltShapes.js';
@@ -428,6 +429,49 @@ for (const lvl of [1, 2, 3]) {
     earned += o.pay;
   }
   console.log('✓ la economía del planeta 1 nunca se atasca (sobran', earned, 'créditos)');
+}
+
+// 20) Pedido de rescate: te gastas el dinero en el divisor y no te llega para la prensa
+{
+  const s = createGame(55);
+  s.orderIndex = 1;                       // pedido 2: placas
+  s.money = 20;
+  own(s, 'divisor');                      // ...porque compraste el divisor
+  assert.ok(isStuck(s), 'atascado: sin prensa y sin dinero');
+  run(s, 1.1);
+  const r = s.rescue;
+  assert.ok(r, 'Chatarrex abre un rescate');
+  assert.equal(r.item, 'chatarra', 'con lo que tienes solo puedes mandar chatarra');
+  assert.ok(r.rate > beltRate(1), 'pide más de lo que lleva una cinta: hay que montar varias líneas');
+  assert.ok(20 + r.pay >= BUILDINGS.prensa.price, 'paga lo justo para la prensa');
+  const { x, y } = s.ship;
+  // a ritmo flojo (una sola cinta) no se cumple
+  for (let i = 0; i < 25 * TICK_RATE; i++) { if (i % 6 === 0) tryInsert(s, x, y, 'chatarra', 0); step(s); }
+  assert.ok(s.rescue, 'una cinta sola no llega');
+  assert.equal(s.money, 20, 'y la chatarra suelta no se paga');
+  // a buen ritmo, sí
+  for (let i = 0; i < 25 * TICK_RATE && s.rescue; i++) { if (i % 3 === 0) tryInsert(s, x, y, 'chatarra', 0); step(s); }
+  assert.equal(s.rescue, null, 'rescate cumplido');
+  assert.ok(s.money >= BUILDINGS.prensa.price);
+  assert.ok(applyAction(s, { type: 'buy', kind: 'prensa' }).ok, 'ya puedes comprar la prensa');
+  run(s, 1.1);
+  assert.equal(s.rescue, null, 'y no vuelve a saltar');
+  console.log('✓ pedido de rescate: chatarra a', r.rate, '/s, paga', r.pay);
+}
+
+// 21) El rescate usa lo más valioso que ya sabes fabricar
+{
+  const s = createGame(56);
+  own(s, 'prensa', 'ensambladora', 'divisor');
+  s.orderIndex = 4;                       // pedido 5: alambre (falta la trefiladora)
+  s.money = 0;
+  run(s, 1.1);
+  assert.equal(s.rescue.item, 'engranaje', 'pide engranajes, que es lo mejor que tienes');
+  assert.ok(Math.abs(s.rescue.rate - 2.5) < 1e-9, 'dos ensambladoras: 2,5 engranajes/s');
+  assert.equal(rescueCount(s), 0);
+  const twin = deserialize(serialize(s));
+  assert.deepEqual(twin.rescue, s.rescue, 'el rescate se guarda con la partida');
+  console.log('✓ rescate con engranajes a 2,5/s');
 }
 
 console.log('Todo OK');

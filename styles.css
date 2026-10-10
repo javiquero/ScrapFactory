@@ -118,6 +118,10 @@ button:focus-visible { outline: 3px solid var(--sun); outline-offset: 2px; }
   transition: width 0.25s ease-out;
 }
 .order.done { animation: bump 0.6s ease-out; }
+/* rescate: etiqueta de "aviso" en vez de envío normal */
+.order.rescue { background: #ffe9c7; border-color: #b8495a; }
+.order.rescue .order-stamp { background: var(--sun); color: var(--forest); }
+.order.rescue .order-fill { background: #b8495a; }
 @keyframes bump {
   30% { transform: scale(1.06) rotate(-1deg); }
   100% { transform: none; }

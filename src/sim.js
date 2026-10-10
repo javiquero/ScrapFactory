@@ -2,10 +2,11 @@
 // No toca nada de pantalla; solo lee y escribe el estado. Determinista.
 
 import {
-  BUILDINGS, BELT_SPACING, DT, DX, DY, ITEMS, MACHINE_BUFFER, OUTPUT_BUFFER, SHIP_SIZE,
+  BUILDINGS, BELT_SPACING, DT, TICK_RATE, DX, DY, ITEMS, MACHINE_BUFFER, OUTPUT_BUFFER, SHIP_SIZE,
   opposite, orderAt, planetAt, beltSpeed, extractorRate, craftTime,
 } from './defs.js';
 import { key } from './world.js';
+import { checkRescue, rescueDeliver } from './rescue.js';
 
 // La nave ocupa 2×2: cualquier cosa que entre por cualquiera de sus bordes se envía
 const onShip = (state, x, y) => {
@@ -49,6 +50,7 @@ export function tryInsert(state, x, y, type, dir) {
 // lo demás Chatarrex se lo queda "por si acaso" y no paga nada.
 function deliver(state, type) {
   state.delivered[type] = (state.delivered[type] || 0) + 1;
+  if (rescueDeliver(state, type)) { state.events.push({ type: 'delivered', item: type }); return; }
   const order = orderAt(state.planet || 0, state.orderIndex);
   if (type === order.item) {
     state.money = (state.money || 0) + (ITEMS[type]?.value || 0);
@@ -78,6 +80,8 @@ function pushOut(state, e) {
 
 export function step(state) {
   state.tick++;
+  // una vez por segundo: ¿se ha quedado sin dinero para lo que pide el pedido?
+  if (state.tick % TICK_RATE === 0) checkRescue(state);
   // Orden estable: por id de entidad, para que sea igual en todas las máquinas.
   const list = Object.values(state.entities).sort((a, b) => a.id - b.id);
 

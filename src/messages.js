@@ -1,6 +1,7 @@
 // Comunicados de Chatarrex S.A., la corporación que paga poco y tarde (pero paga).
 
 import { BUILDINGS, ITEMS, PLANETS } from './defs.js';
+import { RESCUE_SECONDS } from './rescue.js';
 
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
@@ -93,6 +94,29 @@ export function wrongItemMessage(item) {
     `Recordatorio: solo pagamos lo del pedido. Lo otro lo usamos de pisapapeles.`,
   ]);
 }
+
+export function rescueStartMessages(state, missing) {
+  const r = state.rescue;
+  const MASC = ['horno', 'divisor', 'extractor'];
+  const what = missing.map((k) => `${MASC.includes(k) ? 'el' : 'la'} ${BUILDINGS[k].name.toLowerCase()}`).join(' y ');
+  return [
+    pick([
+      `Contabilidad ha detectado que te has gastado el dinero en caprichos y ahora no puedes pagar ${what}. Qué sorpresa.`,
+      `Sin dinero para ${what}. Te recordamos que el catálogo no es una tienda de chuches, colono.`,
+      `Alerta financiera: tus decisiones de compra han sido estudiadas por expertos. No salen bien paradas. Te falta ${what}.`,
+    ]),
+    `Te ofrecemos un trabajito de rescate: mantén ${num(r.rate)} ${ITEMS[r.item].plural} por segundo llegando a la nave durante ${RESCUE_SECONDS} segundos. Con lo que ya tienes se puede, pero no con una sola máquina. Paga ${money(r.pay)}, justo para salir del lío.`,
+  ];
+}
+
+export function rescueDoneMessage(pay) {
+  return pick([
+    `Rescate cumplido. Te pagamos ${money(pay)}. Esta vez gástalo en lo que pide el pedido, ¿vale?`,
+    `Muy bien, colono. ${money(pay)} en tu cuenta. Hemos anotado este episodio en tu expediente. En rojo.`,
+  ]);
+}
+
+const num = (v) => (Math.round(v * 100) / 100).toLocaleString('es-ES');
 
 export const FIRST_BELT = 'Primera cinta instalada. Nuestros abogados confirman que mover cosas sigue siendo legal.';
 

@@ -3,6 +3,7 @@
 import { BUILDINGS, CATEGORIES, ITEMS, PLANETS, MACHINE_BUFFER, beltRate, extractorRate, craftTime, shopAt } from './defs.js';
 import { currentOrder, hasNextPlanet, nextUpgrade } from './state.js';
 import { money, shipText } from './messages.js';
+import { rescueCount, RESCUE_SECONDS } from './rescue.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -154,19 +155,32 @@ export class UI {
 
   renderOrder(state, celebrate = false) {
     this.renderMoney(state);
-    const o = currentOrder(state);
-    const k = `${state.planet}:${state.orderIndex}:${state.orderProgress}:${state.planetDone}`;
+    const r = state.rescue;
+    const got = r ? rescueCount(state) : 0;
+    const k = `${state.planet}:${state.orderIndex}:${state.orderProgress}:${state.planetDone}:${r ? r.item + got : ''}`;
     if (k === this.lastOrderKey && !celebrate) return;
     this.lastOrderKey = k;
-    const total = PLANETS[state.planet].orders.length;
-    $('orderIcon').src = this.icons['item_' + o.item] || '';
-    $('orderPlanet').textContent = `Planeta ${state.planet + 1} · ${PLANETS[state.planet].nick}`;
-    $('orderTitle').textContent = o.bonus ? 'Pedido extra' : `Pedido ${state.orderIndex + 1} de ${total}`;
-    $('orderCount').textContent = `${state.orderProgress} / ${o.amount} ${ITEMS[o.item].plural} · paga ${money(o.pay)}`;
-    const canLaunch = state.planetDone && hasNextPlanet(state);
-    $('launchBtn').hidden = !canLaunch;
-    if (canLaunch) $('launchBtn').textContent = `Despegar al planeta ${state.planet + 2}`;
-    $('orderFill').style.width = `${Math.min(100, (state.orderProgress / o.amount) * 100)}%`;
+    $('order').classList.toggle('rescue', !!r);
+    if (r) {
+      // pedido de rescate: mide un ritmo, no un total
+      $('orderIcon').src = this.icons['item_' + r.item] || '';
+      $('orderPlanet').textContent = 'Rescate de Chatarrex';
+      $('orderTitle').textContent = `${num(r.rate)} ${ITEMS[r.item].plural}/s`;
+      $('orderCount').textContent = `${got} / ${r.amount} en ${RESCUE_SECONDS} s · paga ${money(r.pay)}`;
+      $('orderFill').style.width = `${Math.min(100, (got / r.amount) * 100)}%`;
+      $('launchBtn').hidden = true;
+    } else {
+      const o = currentOrder(state);
+      const total = PLANETS[state.planet].orders.length;
+      $('orderIcon').src = this.icons['item_' + o.item] || '';
+      $('orderPlanet').textContent = `Planeta ${state.planet + 1} · ${PLANETS[state.planet].nick}`;
+      $('orderTitle').textContent = o.bonus ? 'Pedido extra' : `Pedido ${state.orderIndex + 1} de ${total}`;
+      $('orderCount').textContent = `${state.orderProgress} / ${o.amount} ${ITEMS[o.item].plural} · paga ${money(o.pay)}`;
+      const canLaunch = state.planetDone && hasNextPlanet(state);
+      $('launchBtn').hidden = !canLaunch;
+      if (canLaunch) $('launchBtn').textContent = `Despegar al planeta ${state.planet + 2}`;
+      $('orderFill').style.width = `${Math.min(100, (state.orderProgress / o.amount) * 100)}%`;
+    }
     if (celebrate) {
       const el = $('order');
       el.classList.remove('done');

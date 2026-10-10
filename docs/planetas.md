@@ -16,6 +16,7 @@ Montar una cadena y esperar aburre. El reto está en **volver a resolver la log�
 - Comprar (`{type:'buy', kind}`) y mejorar (`{type:'upgrade', kind}`) son acciones serializables, como todo.
 - Las mejoras suben de nivel **todos** los edificios de un tipo (×1 / ×1,5 / ×2). Precio: cinta 300 / 900, extractor 250 / 750, máquinas 2× y 6× su precio (mínimo 200).
 - Al despegar se conservan el dinero, lo comprado y las mejoras. Se pierde la fábrica.
+- **Pedido de rescate** (`src/rescue.js`): si te gastas el dinero en lo que no toca (un divisor, una mejora…) y ya no puedes pagar las máquinas que necesita el pedido actual, Chatarrex te suelta un comentario sarcástico y un rescate. Se cumple solo con lo que ya tienes: pide el objeto más valioso que sabes fabricar en este planeta a un **ritmo** de 2 máquinas finales (3 extractores si es en bruto) durante 20 s. Paga lo justo (lo que falta + 10 %, mínimo 50 ₡). Mientras dura, ocupa la etiqueta del pedido; al cumplirlo vuelve el pedido normal. Se comprueba una vez por segundo dentro de `step()`, así que también desatasca partidas guardadas.
 - Una prueba (`tests/sim.test.mjs`, nº 19) comprueba que, contando solo lo que pagan los pedidos y sus piezas, nunca hace falta una máquina que aún no se puede pagar.
 
 ## Planeta 1: la cadena larga de la chatarra

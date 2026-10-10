@@ -199,6 +199,12 @@ async function boot() {
       } else if (ev.type === 'wrongItem' && performance.now() - lastWrong > 30000) {
         lastWrong = performance.now();
         ui.memo(msg.wrongItemMessage(ev.item));
+      } else if (ev.type === 'rescueStart') {
+        for (const m of msg.rescueStartMessages(state, ev.missing)) ui.memo(m);
+        ui.renderOrder(state, true);
+      } else if (ev.type === 'rescueDone') {
+        ui.memo(msg.rescueDoneMessage(ev.pay));
+        ui.renderOrder(state, true);
       } else if (ev.type === 'firstBelt') {
         ui.memo(msg.FIRST_BELT);
       }
