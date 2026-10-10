@@ -214,7 +214,8 @@ export class UI {
       const total = PLANETS[state.planet].orders.length;
       $('orderIcon').src = this.icons['item_' + o.item] || '';
       $('orderPlanet').textContent = `Planeta ${state.planet + 1} · ${PLANETS[state.planet].nick}`;
-      $('orderTitle').textContent = o.bonus ? 'Pedido extra' : `Pedido ${state.orderIndex + 1} de ${total}`;
+      $('orderTitle').textContent = !o.bonus ? `Pedido ${state.orderIndex + 1} de ${total}`
+        : hasNextPlanet(state) ? 'Pedido extra' : `Pedido extra · planeta ${state.planet + 2} en obras`;
       $('orderCount').textContent = `${state.orderProgress} / ${o.amount} ${ITEMS[o.item].plural} · paga ${money(o.pay)}`;
       const canLaunch = state.planetDone && hasNextPlanet(state);
       $('launchBtn').hidden = !canLaunch;

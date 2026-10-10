@@ -539,4 +539,28 @@ for (const lvl of [1, 2, 3]) {
   console.log('✓ puente: cruzan', s.delivered.chatarra, 'chatarra por debajo y', outV.length, 'placas por encima');
 }
 
+// 24) Una cinta cruza varias cintas seguidas: puentes encadenados
+{
+  const s = createGame(71);
+  own(s, 'puente');
+  const X = 20, Y = 20;
+  for (let x = X - 4; x <= X + 8; x++) for (let y = Y - 4; y <= Y + 6; y++) { delete s.world.nodes[key(x, y)]; delete s.entities[key(x, y)]; }
+  // tres cintas verticales paralelas, una al lado de otra
+  for (const x of [X, X + 1, X + 2]) {
+    const v = []; for (let y = Y - 3; y <= Y + 3; y++) v.push({ x, y, dir: 1 });
+    applyAction(s, { type: 'placeMany', kind: 'cinta', cells: v });
+  }
+  // una horizontal que las atraviesa las tres
+  s.world.nodes[key(X - 3, Y)] = 'chatarra';
+  applyAction(s, { type: 'place', kind: 'extractor', x: X - 3, y: Y, dir: 0 });
+  const h = []; for (let x = X - 2; x <= X + 4; x++) h.push({ x, y: Y, dir: 0 });
+  applyAction(s, { type: 'placeMany', kind: 'cinta', cells: h });
+  for (const x of [X, X + 1, X + 2]) assert.equal(s.entities[key(x, Y)].kind, 'puente', 'puente en ' + x);
+  assert.equal(beltShape(s, s.entities[key(X + 3, Y)]), 'straight', 'la cinta de después del último puente va recta');
+  s.ship = { x: X + 5, y: Y - 1 };
+  run(s, 20);
+  assert.ok((s.delivered.chatarra || 0) > 30, 'cruza tres cintas seguidas: ' + s.delivered.chatarra);
+  console.log('✓ puentes encadenados: cruza 3 cintas y entrega', s.delivered.chatarra);
+}
+
 console.log('Todo OK');
