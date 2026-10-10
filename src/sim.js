@@ -72,7 +72,7 @@ export function step(state) {
           e.timer += DT;
           if (e.timer >= BUILDINGS.extractor.time) {
             e.timer = 0;
-            e.out.push(nodeType === 'chatarra' ? 'chatarra' : 'platano');
+            e.out.push(nodeType);
           }
         }
         pushOut(state, e);

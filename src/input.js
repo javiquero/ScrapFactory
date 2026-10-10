@@ -6,6 +6,7 @@ import { inBounds, canPlace } from './state.js';
 import { key } from './world.js';
 
 const TAP_SLOP = 8;
+const LONG_PRESS_MS = 500;
 
 // Recorrido en L de una casilla a otra. Cada casilla apunta hacia la siguiente.
 export function beltPath(a, b, fallbackDir) {
@@ -29,11 +30,14 @@ export function beltPath(a, b, fallbackDir) {
   return cells;
 }
 
-export function attachInput(canvas, { renderer, getState, ctl, dispatch, onTap }) {
+export function attachInput(canvas, { renderer, getState, ctl, dispatch, onTapEntity, onTapEmpty, onLongPress }) {
   const pointers = new Map();
   let gesture = null;   // gesto de un dedo en curso
   let pinch = null;     // gesto de dos dedos en curso
   let pinchHappened = false;
+  let pressTimer = null;
+  const cancelPress = () => { clearTimeout(pressTimer); pressTimer = null; };
+  const entityAt = (t) => getState().entities[key(t.x, t.y)];
 
   const local = (ev) => {
     const r = canvas.getBoundingClientRect();
@@ -66,6 +70,7 @@ export function attachInput(canvas, { renderer, getState, ctl, dispatch, onTap }
     const [a, b] = [...pointers.values()];
     pinch = { dist: Math.hypot(a.x - b.x, a.y - b.y), mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2 };
     pinchHappened = true;
+    cancelPress();
     gesture = null;
     renderer.setGhosts([]);
   }
@@ -78,7 +83,19 @@ export function attachInput(canvas, { renderer, getState, ctl, dispatch, onTap }
     if (pointers.size > 2) return;
     pinchHappened = false;
     const tile = renderer.screenToTile(p.x, p.y);
-    gesture = { sx: p.x, sy: p.y, lx: p.x, ly: p.y, moved: false, startTile: tile, lastTile: tile, cells: [tile], seen: new Set([key(tile.x, tile.y)]) };
+    const g = { t0: performance.now(), sx: p.x, sy: p.y, lx: p.x, ly: p.y, moved: false, long: false, startTile: tile, lastTile: tile, cells: [tile], seen: new Set([key(tile.x, tile.y)]) };
+    gesture = g;
+    cancelPress();
+    // Mantener pulsado un edificio: menú de girar / quitar
+    if (ctl.tool !== 'borrar' && entityAt(tile)) {
+      pressTimer = setTimeout(() => {
+        if (gesture !== g || g.moved || pinchHappened) return;
+        g.long = true;
+        renderer.setGhosts([]);
+        navigator.vibrate?.(15);
+        onLongPress(tile);
+      }, LONG_PRESS_MS);
+    }
     previewGesture();
   });
 
@@ -106,7 +123,8 @@ export function attachInput(canvas, { renderer, getState, ctl, dispatch, onTap }
     }
     if (!gesture) return;
 
-    if (!gesture.moved && Math.hypot(p.x - gesture.sx, p.y - gesture.sy) > TAP_SLOP) gesture.moved = true;
+    if (!gesture.moved && Math.hypot(p.x - gesture.sx, p.y - gesture.sy) > TAP_SLOP) { gesture.moved = true; cancelPress(); }
+    if (gesture.long) return;
 
     if (ctl.tool === 'mano') {
       if (gesture.moved) renderer.pan(p.x - gesture.lx, p.y - gesture.ly);
@@ -134,13 +152,28 @@ export function attachInput(canvas, { renderer, getState, ctl, dispatch, onTap }
     }
     if (pointers.size > 0) return;
     pinch = null;
+    cancelPress();
     const g = gesture;
     gesture = null;
+    if (g?.long) return; // la ficha ya está abierta y el edificio marcado
+    // Si el temporizador se retrasó (móvil ocupado), decide por el tiempo pulsado
+    if (g && !g.moved && !pinchHappened && ctl.tool !== 'borrar' && performance.now() - g.t0 >= LONG_PRESS_MS && entityAt(g.startTile)) {
+      renderer.setGhosts([]);
+      onLongPress(g.startTile);
+      return;
+    }
     if (!g || pinchHappened || ev.type === 'pointercancel') { renderer.setGhosts([]); return; }
 
     const t = ctl.tool;
+    const tap = !g.moved && g.cells.length === 1;
+    // Tocar un edificio que ya existe lo gira, con cualquier herramienta menos Quitar
+    if (tap && t !== 'borrar' && entityAt(g.startTile)) {
+      renderer.setGhosts([]);
+      onTapEntity(g.startTile);
+      return;
+    }
     if (t === 'mano') {
-      if (!g.moved) onTap(g.startTile);
+      if (tap) onTapEmpty(g.startTile);
     } else if (t === 'cinta') {
       dispatch({ type: 'placeMany', kind: 'cinta', cells: g.cells.map(({ x, y, dir }) => ({ x, y, dir })) }, g.cells.length === 1);
     } else if (t === 'borrar') {

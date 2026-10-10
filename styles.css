@@ -4,7 +4,7 @@
   --moss: #8cc56a;
   --lichen: #eef6d8;
   --lichen-2: #dbeab5;
-  --banana: #ffd84a;
+  --sun: #ffd84a;
   --umbrella: #ff7a8a;
   --teal: #7fe3e0;
   --ink-soft: #4d6b52;
@@ -42,7 +42,7 @@ button {
   background: none;
   cursor: pointer;
 }
-button:focus-visible { outline: 3px solid var(--banana); outline-offset: 2px; }
+button:focus-visible { outline: 3px solid var(--sun); outline-offset: 2px; }
 
 /* ---------- Pedido (etiqueta de envío) ---------- */
 .hud {
@@ -222,7 +222,7 @@ button:focus-visible { outline: 3px solid var(--banana); outline-offset: 2px; }
   max-width: 100%;
 }
 .tool[aria-pressed='true'] {
-  background: var(--banana);
+  background: var(--sun);
   color: var(--forest);
 }
 .tool.more { background: var(--forest-2); }

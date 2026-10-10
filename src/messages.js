@@ -13,10 +13,10 @@ export const WELCOME = [
 export const TIPS = [
   'Pon un extractor encima de un vertedero de chatarra y lleva lo que saque con cintas hasta el teletransportador.',
   'Arrastra el dedo con la cinta elegida para trazar el recorrido de una vez. Con dos dedos mueves el mapa.',
-  'Recordatorio: el paraguas de la empresa es solo decorativo. No lo uses si llueve.',
-  'Los plátanos locales tienen un 3 % de radiactividad. Dentro de lo aceptable para el personal de campo.',
+  'Recordatorio: el casco de la empresa es solo decorativo. No lo uses si cae algo.',
+  'El aire local tiene un 3 % de radiactividad. Dentro de lo aceptable para el personal de campo.',
   'El departamento de Recursos Humanos te recuerda que no hay departamento de Recursos Humanos.',
-  'Toca un edificio con la mano para girarlo o ver qué tiene dentro.',
+  'Toca un edificio para girarlo. Mantenlo pulsado para ver qué tiene dentro o quitarlo.',
 ];
 
 export function orderDoneMessage(unlocks) {
@@ -34,9 +34,8 @@ export function orderIntro(order) {
   const name = ITEMS[order.item].name.toLowerCase();
   const lines = {
     chatarra: `Necesitamos ${order.amount} de chatarra. Para un proyecto muy importante que no podemos contarte.`,
-    platano: `La junta quiere ${order.amount} plátanos alienígenas. Para el desayuno, suponemos.`,
     placa: `Ahora ${order.amount} placas prensadas. Mete la chatarra en una prensa y aprieta.`,
-    paraguas: `Urgente: ${order.amount} paraguas. En la Tierra llueve chatarra desde que empezaste a enviarla.`,
+    engranaje: `Urgente: ${order.amount} engranajes. La máquina de café de la junta directiva ha vuelto a romperse.`,
   };
   return lines[order.item] || `Siguiente pedido: ${order.amount} × ${name}.`;
 }

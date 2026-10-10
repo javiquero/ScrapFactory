@@ -101,16 +101,6 @@ export function makeTextures(renderer) {
     }
   });
 
-  t.node_platano = tex(renderer, (g) => {
-    g.roundRect(3, 3, T - 6, T - 6, 16).fill({ color: 0x4f8f3a, alpha: 0.75 });
-    // hojas
-    g.ellipse(22, 22, 16, 7).fill(0x3f7a2c);
-    g.ellipse(42, 24, 16, 7).fill(0x47873a);
-    g.ellipse(32, 40, 7, 16).fill(0x3a7029);
-    // racimos
-    for (const [x, y] of [[20, 36], [44, 40], [30, 20]]) bananaShape(g, x, y, 8);
-  });
-
   // --- Decoración ---
   t.arbol = tex(renderer, (g) => {
     g.ellipse(T / 2, T - 12, 18, 6).fill({ color: 0x000000, alpha: 0.15 });
@@ -132,16 +122,6 @@ export function makeTextures(renderer) {
     g.ellipse(32, 40, 16, 10).fill(0x8f9a8a);
     g.ellipse(28, 37, 9, 5).fill(0xa9b3a3);
   });
-  t.sombrilla = tex(renderer, (g) => {
-    g.rect(T / 2 - 2, 26, 4, 30).fill(0x5a4632);
-    g.ellipse(T / 2, T - 8, 14, 4).fill({ color: 0x000000, alpha: 0.18 });
-    const cols = [0xff7a8a, 0xfff2e0];
-    for (let i = 0; i < 6; i++) {
-      const a0 = Math.PI + (i / 6) * Math.PI;
-      const a1 = Math.PI + ((i + 1) / 6) * Math.PI;
-      g.moveTo(T / 2, 28).arc(T / 2, 28, 24, a0, a1).lineTo(T / 2, 28).fill(cols[i % 2]);
-    }
-  });
 
   // --- Objetos ---
   for (const type in ITEMS) {
@@ -149,20 +129,6 @@ export function makeTextures(renderer) {
   }
 
   return t;
-}
-
-function bananaShape(g, x, y, s) {
-  const pts = [];
-  for (let i = 0; i <= 10; i++) {
-    const a = Math.PI * 0.15 + (i / 10) * Math.PI * 0.7;
-    pts.push(x + Math.cos(a) * s * 1.4, y - s * 0.6 + Math.sin(a) * s);
-  }
-  for (let i = 10; i >= 0; i--) {
-    const a = Math.PI * 0.15 + (i / 10) * Math.PI * 0.7;
-    pts.push(x + Math.cos(a) * s * 1.1, y - s * 0.6 + Math.sin(a) * s * 0.55);
-  }
-  g.poly(pts).fill(0xffd84a);
-  g.poly(pts).stroke({ width: 1.5, color: 0xc9a227 });
 }
 
 function drawItem(g, type) {
@@ -174,18 +140,19 @@ function drawItem(g, type) {
       g.poly([6, 14, 12, 6, 24, 8, 27, 18, 20, 26, 9, 24]).stroke({ width: 2, color: accent });
       g.circle(16, 16, 3).fill(accent);
       break;
-    case 'platano':
-      bananaShape(g, 16, 18, 10);
-      break;
     case 'placa':
       g.roundRect(6, 6, 20, 20, 4).fill(color);
       g.roundRect(6, 6, 20, 20, 4).stroke({ width: 2, color: accent });
       for (const [x, y] of [[10, 10], [22, 10], [10, 22], [22, 22]]) g.circle(x, y, 1.6).fill(accent);
       break;
-    case 'paraguas':
-      g.rect(15, 15, 2.5, 12).fill(0x5a4632);
-      g.moveTo(16, 16).arc(16, 16, 11, Math.PI, Math.PI * 2).lineTo(16, 16).fill(color);
-      g.moveTo(16, 16).arc(16, 16, 11, Math.PI, Math.PI * 2).lineTo(16, 16).stroke({ width: 2, color: accent });
+    case 'engranaje':
+      for (let i = 0; i < 8; i++) {
+        const ang = (i / 8) * Math.PI * 2;
+        g.rect(16 + Math.cos(ang) * 10 - 2.5, 16 + Math.sin(ang) * 10 - 2.5, 5, 5).fill(accent);
+      }
+      g.circle(16, 16, 10).fill(color);
+      g.circle(16, 16, 10).stroke({ width: 2, color: accent });
+      g.circle(16, 16, 3.5).fill(accent);
       break;
   }
 }

@@ -109,4 +109,18 @@ function line(state, x, y, n) {
   console.log('✓ divisor: entregadas', s.delivered.chatarra);
 }
 
+// 7) Ensambladora: 2 placas + 1 chatarra -> engranaje (y sin plátanos en el mapa)
+{
+  const s = createGame(42);
+  assert.ok(Object.values(s.world.nodes).every((t) => t === 'chatarra'), 'solo chatarra en el mapa');
+  s.unlocked.push('ensambladora');
+  const sp = s.world.spawn;
+  applyAction(s, { type: 'place', kind: 'ensambladora', x: sp.x - 1, y: sp.y, dir: 0 });
+  const e = s.entities[key(sp.x - 1, sp.y)];
+  e.inv = { placa: 4, chatarra: 2 };
+  run(s, 8);
+  assert.equal(s.delivered.engranaje, 2, 'engranajes: ' + s.delivered.engranaje);
+  console.log('✓ ensambladora: entregados', s.delivered.engranaje, 'engranajes');
+}
+
 console.log('Todo OK');

@@ -41,7 +41,7 @@ export function generateWorld(seed) {
 
   // Parcelas garantizadas cerca del punto de aterrizaje
   blob(nodes, rand, cx - 6, cy - 2, 'chatarra', 9);
-  blob(nodes, rand, cx + 6, cy + 3, 'platano', 8);
+  blob(nodes, rand, cx + 6, cy + 3, 'chatarra', 6);
   blob(nodes, rand, cx - 3, cy + 7, 'chatarra', 7);
 
   // Resto del mapa
@@ -49,13 +49,13 @@ export function generateWorld(seed) {
     const x = 3 + Math.floor(rand() * (MAP_W - 6));
     const y = 3 + Math.floor(rand() * (MAP_H - 6));
     if (Math.abs(x - cx) < 5 && Math.abs(y - cy) < 5) continue;
-    blob(nodes, rand, x, y, rand() < 0.55 ? 'chatarra' : 'platano', 5 + Math.floor(rand() * 8));
+    blob(nodes, rand, x, y, 'chatarra', 5 + Math.floor(rand() * 8));
   }
 
   // Zona despejada alrededor del teletransportador inicial
   for (let y = cy - 2; y <= cy + 2; y++) for (let x = cx - 2; x <= cx + 2; x++) delete nodes[key(x, y)];
 
-  // Decoración (no bloquea): árboles, flores, piedras, bananeros enanos
+  // Decoración (no bloquea): árboles, flores, piedras
   const decor = [];
   for (let y = 0; y < MAP_H; y++) {
     for (let x = 0; x < MAP_W; x++) {
@@ -67,8 +67,6 @@ export function generateWorld(seed) {
       else if (r < 0.105) decor.push({ x, y, kind: 'piedra' });
     }
   }
-  // El paraguas del colono, plantado junto a su "oficina"
-  decor.push({ x: cx - 1, y: cy - 1, kind: 'sombrilla' });
 
   return { nodes, decor, spawn: { x: cx, y: cy } };
 }

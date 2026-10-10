@@ -8,7 +8,7 @@
 import { BUILDINGS, MAP_W, MAP_H, STARTING_UNLOCKS, orderAt } from './defs.js';
 import { generateWorld, key } from './world.js';
 
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
 
 export function createGame(seed = Math.floor(Math.random() * 1e9)) {
   const world = generateWorld(seed);

@@ -1,7 +1,7 @@
 // Arranque: une estado, simulación, pintado, gestos e interfaz.
 
 import { Application } from '../vendor/pixi.min.mjs';
-import { DT, BUILDINGS } from './defs.js';
+import { DT, BUILDINGS, ITEMS } from './defs.js';
 import { createGame, applyAction, serialize, deserialize, currentOrder } from './state.js';
 import { step } from './sim.js';
 import { makeTextures } from './textures.js';
@@ -11,7 +11,7 @@ import { UI } from './ui.js';
 import { key } from './world.js';
 import * as msg from './messages.js';
 
-const SAVE_KEY = 'scrapfactory.save.v1';
+const SAVE_KEY = 'scrapfactory.save.v2';
 const CAM_KEY = 'scrapfactory.cam.v1';
 
 const store = {
@@ -33,7 +33,7 @@ async function boot() {
   const textures = makeTextures(app.renderer);
   const icons = {};
   const iconKeys = { cinta: 'belt0', ...Object.fromEntries(Object.keys(BUILDINGS).filter((k) => k !== 'cinta').map((k) => [k, k])) };
-  for (const t of ['chatarra', 'platano', 'placa', 'paraguas']) iconKeys['item_' + t] = 'item_' + t;
+  for (const t of Object.keys(ITEMS)) iconKeys['item_' + t] = 'item_' + t;
   await Promise.all(Object.entries(iconKeys).map(async ([name, tk]) => {
     try { icons[name] = await app.renderer.extract.base64(textures[tk]); } catch { icons[name] = ''; }
   }));
@@ -118,10 +118,17 @@ async function boot() {
     getState: () => state,
     ctl,
     dispatch,
-    onTap: (tile) => {
+    onTapEntity: (tile) => {
+      const e = state.entities[key(tile.x, tile.y)];
+      if (!e) return;
+      if (e.kind === 'teletransportador') { ui.showInspect(e, state); renderer.setSelected(tile); return; }
+      dispatch({ type: 'rotate', x: tile.x, y: tile.y });
+      if (ui.inspected === e) renderer.setSelected(tile);
+    },
+    onTapEmpty: () => { ui.hideInspect(); renderer.setSelected(null); },
+    onLongPress: (tile) => {
       const e = state.entities[key(tile.x, tile.y)];
       if (e) { ui.showInspect(e, state); renderer.setSelected(tile); }
-      else { ui.hideInspect(); renderer.setSelected(null); }
     },
   });
 
