@@ -44,6 +44,7 @@ Cada push a `main` se despliega solo en Vercel.
 | `src/world.js` | Generación del mapa a partir de una semilla. |
 | `src/textures.js` | Reúne todos los gráficos. |
 | `src/sprites/` | Un archivo por grupo de gráficos: `belts.js` (cintas, curvas y uniones), `machines.js`, `terrain.js`, `items.js`, y `common.js` con la paleta. |
+| `dev/sprites.html` | Muestrario de todos los sprites para revisar el arte sin jugar (`?filter=extractor&scale=3`). |
 | `src/beltShapes.js` | Decide qué forma lleva cada cinta (recta, curva, unión) y por dónde pasan los objetos. |
 | `src/render.js` | Pintado con PixiJS y cámara. |
 | `src/input.js` | Gestos táctiles y de ratón. |

@@ -67,6 +67,7 @@ async function boot() {
 
   function selectTool(tool, fromPanel = false) {
     ctl.tool = tool;
+    renderer.setBuildMode(tool !== 'mano');
     if (BUILDINGS[tool] && tool !== 'cinta') {
       ctl.recent = [tool, ...ctl.recent.filter((k) => k !== tool)];
     }

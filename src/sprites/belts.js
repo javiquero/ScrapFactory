@@ -2,26 +2,28 @@
 // Todo se dibuja con la salida hacia la DERECHA. "L" = entra por el lado de arriba
 // (izquierda según avanza la cinta), "R" = entra por abajo (derecha según avanza).
 
-import { C, T, HALF, tex } from './common.js';
+import { C, T, HALF, tex, grad } from './common.js';
 
 export const BELT_SHAPES = ['straight', 'curveL', 'curveR', 'tee', 'mergeL', 'mergeR', 'mergeLR'];
 
 const W = 21;                       // media anchura de la banda
 const RAIL = [0, C.METAL, C.BUTTER, C.TEAL];
 const RAIL_D = [0, C.METAL_D, C.BUTTER_D, 0x3fa9a6];
+const RAIL_L = [0, C.METAL_L, C.BUTTER_L, 0xd2fbf9];
 const SLAT = 16;                    // separación de los listones (px)
 
 function straight(g, lvl, f) {
   g.rect(0, HALF - W + 3, T, W * 2).fill({ color: C.SHADOW, alpha: 0.18 });
-  g.rect(0, HALF - W, T, W * 2).fill(C.BELT);
+  g.rect(0, HALF - W, T, W * 2).fill(grad([[0, C.BELT_D], [0.25, C.BELT], [0.75, C.BELT], [1, C.BELT_D]]));
   const off = (f / 4) * SLAT;
   for (let x = -SLAT; x < T + SLAT; x += SLAT) {
     const cx = x + off;
     g.roundRect(cx, HALF - 15, 7, 30, 3).fill(C.BELT_L);
+    g.rect(cx + 1, HALF - 14, 2, 28).fill({ color: 0xffffff, alpha: 0.08 });
     g.poly([cx + 9, HALF - 5, cx + 14, HALF, cx + 9, HALF + 5]).fill({ color: RAIL[lvl], alpha: 0.55 });
   }
   for (const y of [HALF - W - 3, HALF + W - 3]) {
-    g.rect(0, y, T, 6).fill(RAIL[lvl]);
+    g.rect(0, y, T, 6).fill(grad([[0, RAIL_L[lvl]], [0.5, RAIL[lvl]], [1, RAIL_D[lvl]]]));
     g.moveTo(0, y).lineTo(T, y).moveTo(0, y + 6).lineTo(T, y + 6).stroke({ width: 2, color: C.INK });
   }
   for (const x of [8, 40]) { g.circle(x, HALF - W, 1.4).fill(RAIL_D[lvl]); g.circle(x, HALF + W, 1.4).fill(RAIL_D[lvl]); }

@@ -1,10 +1,16 @@
 // Pintado con PixiJS. Solo LEE el estado; nunca lo modifica.
 
-import { Container, Graphics, Sprite } from '../vendor/pixi.min.mjs';
+import { Container, Graphics, Rectangle, Sprite, Texture, TilingSprite } from '../vendor/pixi.min.mjs';
 import { TILE, MAP_W, MAP_H, DX, DY, DT, BELT_SPACING, LEVEL_MULT, beltSpeed } from './defs.js';
 import { rng, key } from './world.js';
 import { beltShape, itemPos } from './beltShapes.js';
-import { ANIMATED } from './sprites/machines.js';
+import { UPRIGHT, HAS_CHUTE } from './sprites/machines.js';
+import { JUNK_KEYS } from './sprites/terrain.js';
+import { MACHINE_ANCHOR_Y, TOP } from './sprites/common.js';
+
+const TALL_DECOR = ['arbol', 'arbol2', 'arbusto'];
+const CH = 16;              // casillas por trozo de suelo
+const CHPX = CH * TILE;
 
 const T = TILE;
 const HALF = T / 2;
@@ -14,16 +20,21 @@ export class Renderer {
     this.app = app;
     this.tx = textures;
     this.world = new Container();
-    this.ground = new Graphics();
-    this.nodeLayer = new Container();
-    this.decorLayer = new Container();
-    this.entityLayer = new Container();
-    this.itemLayer = new Container();
+    this.chunkLayer = new Container();     // suelo horneado por trozos + chatarra y decoración plana
+    this.grid = new TilingSprite({ texture: Texture.EMPTY, width: MAP_W * T, height: MAP_H * T });
+    this.entityLayer = new Container();    // cintas y divisores (planos)
+    this.itemLayer = new Container();      // objetos sobre las cintas
+    this.tallLayer = new Container();      // máquinas y árboles, ordenados por profundidad
+    this.tallLayer.sortableChildren = true;
     this.ghostLayer = new Container();
     this.highlight = new Graphics();
-    this.world.addChild(this.ground, this.nodeLayer, this.decorLayer, this.entityLayer, this.itemLayer, this.ghostLayer, this.highlight);
+    this.world.addChild(this.chunkLayer, this.grid, this.entityLayer, this.itemLayer, this.tallLayer, this.ghostLayer, this.highlight);
     app.stage.addChild(this.world);
     this.sprites = new Map();   // id de entidad -> sprite
+    this.chunks = [];
+    this.baked = [];
+    this.junk = [];             // piezas de chatarra sueltas
+    this.flatDecor = [];
     this.itemPool = [];
     this.ghostPool = [];
     this.ghostChutes = [];
@@ -44,44 +55,132 @@ export class Renderer {
     this.sync();
   }
 
+  // El suelo es estático: se dibuja una vez y se "hornea" en texturas por trozos de
+  // 16×16 casillas. Así el móvil no repinta miles de formas en cada fotograma.
   drawGround(state) {
-    const g = this.ground;
-    g.clear();
+    for (const t of this.baked) t.destroy(true);
+    this.baked = [];
+    this.chunkLayer.removeChildren().forEach((c) => c.destroy({ children: true }));
+    for (const c of [...this.tallLayer.children]) if (c.isDecor) { this.tallLayer.removeChild(c); c.destroy(); }
+    this.junk = [];
+    this.flatDecor = [];
+
     const rand = rng(state.seed ^ 0x9e3779b9);
-    const greens = [0x8cc56a, 0x89c267, 0x8fc86d, 0x87c065];
-    for (let y = 0; y < MAP_H; y++) {
-      for (let x = 0; x < MAP_W; x++) {
-        g.rect(x * T, y * T, T, T).fill(greens[Math.floor(rand() * greens.length)]);
+    const W = MAP_W * T, H = MAP_H * T;
+    const NX = Math.ceil(MAP_W / CH), NY = Math.ceil(MAP_H / CH);
+    const gfx = [];
+    for (let i = 0; i < NX * NY; i++) gfx.push(new Graphics());
+    // dibuja en todos los trozos que toca el rectángulo [x0,x1]×[y0,y1]
+    const each = (x0, y0, x1, y1, fn) => {
+      const a = Math.max(0, Math.floor(x0 / CHPX)), b = Math.min(NX - 1, Math.floor(x1 / CHPX));
+      const c = Math.max(0, Math.floor(y0 / CHPX)), d = Math.min(NY - 1, Math.floor(y1 / CHPX));
+      for (let cy = c; cy <= d; cy++) for (let cx = a; cx <= b; cx++) fn(gfx[cy * NX + cx]);
+    };
+    const circle = (x, y, r, fill) => each(x - r, y - r, x + r, y + r, (g) => g.circle(x, y, r).fill(fill));
+
+    // hierba: verde de base con manchas grandes y suaves de otros tonos
+    gfx.forEach((g) => g.rect(0, 0, W, H).fill(0x8cc56a));
+    for (let i = 0; i < MAP_W * MAP_H * 0.08; i++) {
+      const x = rand() * W, y = rand() * H, r = 50 + rand() * 140;
+      circle(x, y, r, { color: rand() < 0.5 ? 0x9bd078 : 0x7fb95e, alpha: 0.22 });
+    }
+    for (let i = 0; i < MAP_W * MAP_H * 0.9; i++) {
+      const x = rand() * W, y = rand() * H, h = 5 + rand() * 5;
+      each(x - 5, y - h, x + 5, y, (g) => g.moveTo(x - 3, y).lineTo(x - 4, y - h * 0.7).moveTo(x, y).lineTo(x + 0.5, y - h).moveTo(x + 3, y).lineTo(x + 4, y - h * 0.7)
+        .stroke({ width: 1.6, color: 0x5d9a45, alpha: 0.5, cap: 'round' }));
+    }
+
+    // vertederos: tierra continua con borde irregular
+    const nodes = Object.keys(state.world.nodes).map((k) => k.split(',').map(Number));
+    const blobs = [];
+    for (const [x, y] of nodes) {
+      blobs.push([x * T + HALF + (rand() - 0.5) * 10, y * T + HALF + (rand() - 0.5) * 10, T * 0.5]);
+      for (let k = 0; k < 3; k++) {
+        const a = rand() * Math.PI * 2, d = T * (0.18 + rand() * 0.16);
+        blobs.push([x * T + HALF + Math.cos(a) * d, y * T + HALF + Math.sin(a) * d, T * (0.26 + rand() * 0.12)]);
       }
     }
-    // rejilla suave para saber dónde cae cada cosa
-    for (let x = 0; x <= MAP_W; x++) g.moveTo(x * T, 0).lineTo(x * T, MAP_H * T);
-    for (let y = 0; y <= MAP_H; y++) g.moveTo(0, y * T).lineTo(MAP_W * T, y * T);
-    g.stroke({ width: 1.5, color: 0x2f5a2a, alpha: 0.1 });
-    // matas de hierba sueltas
-    for (let i = 0; i < MAP_W * MAP_H * 0.6; i++) {
-      const x = rand() * MAP_W * T, y = rand() * MAP_H * T;
-      g.moveTo(x - 4, y).lineTo(x - 2, y - 7).moveTo(x, y).lineTo(x, y - 9).moveTo(x + 4, y).lineTo(x + 2, y - 7);
+    for (const [x, y, r] of blobs) circle(x, y, r + 4, { color: 0x6f8f45, alpha: 0.55 }); // hierba pisada
+    for (const [x, y, r] of blobs) circle(x, y, r + 1.5, 0x7d6a4c);
+    for (const [x, y, r] of blobs) circle(x, y, r - 1, 0x9b8462);
+    for (const [x, y] of nodes) {
+      for (let k = 0; k < 3; k++) circle(x * T + rand() * T, y * T + rand() * T, 8 + rand() * 10, { color: 0xb9a07a, alpha: 0.35 });
+      for (let k = 0; k < 5; k++) circle(x * T + rand() * T, y * T + rand() * T, 1.5 + rand() * 2, { color: 0x5a4a35, alpha: 0.8 });
     }
-    g.stroke({ width: 2, color: 0x5f9e48, alpha: 0.45 });
-    // borde del mapa
-    g.rect(0, 0, MAP_W * T, MAP_H * T).stroke({ width: 8, color: 0x2f5a2a, alpha: 0.35 });
+    gfx.forEach((g) => g.rect(0, 0, W, H).stroke({ width: 10, color: 0x2f5a2a, alpha: 0.35 }));
 
-    this.nodeLayer.removeChildren().forEach((c) => c.destroy());
-    for (const k in state.world.nodes) {
-      const [x, y] = k.split(',').map(Number);
-      const type = state.world.nodes[k];
-      const s = new Sprite(this.tx[`node_${type}_${(x * 7 + y * 13) % 3}`] || this.tx['node_' + type]);
-      s.position.set(x * T, y * T);
-      this.nodeLayer.addChild(s);
+    // hornear cada trozo y montar su contenedor (suelo + piezas sueltas encima)
+    this.chunks = [];
+    for (let cy = 0; cy < NY; cy++) {
+      for (let cx = 0; cx < NX; cx++) {
+        const g = gfx[cy * NX + cx];
+        const t = this.app.renderer.generateTexture({ target: g, frame: new Rectangle(cx * CHPX, cy * CHPX, CHPX, CHPX), resolution: 0.5 });
+        g.destroy();
+        this.baked.push(t);
+        const chunk = new Container();
+        const bg = new Sprite(t);
+        bg.position.set(cx * CHPX, cy * CHPX);
+        bg.width = CHPX; bg.height = CHPX;
+        chunk.addChild(bg);
+        chunk.bounds = [cx * CHPX, cy * CHPX, (cx + 1) * CHPX, (cy + 1) * CHPX];
+        this.chunks.push(chunk);
+        this.chunkLayer.addChild(chunk);
+      }
     }
-    this.decorLayer.removeChildren().forEach((c) => c.destroy());
+    const chunkAt = (px, py) => this.chunks[Math.min(NY - 1, Math.floor(py / CHPX)) * NX + Math.min(NX - 1, Math.floor(px / CHPX))];
+
+    // piezas de chatarra repartidas a su aire
+    const pieces = [];
+    for (const [x, y] of nodes) {
+      for (let k = 0; k < 3; k++) {
+        const sp = new Sprite(this.tx[JUNK_KEYS[Math.floor(rand() * JUNK_KEYS.length)]]);
+        sp.anchor.set(0.5);
+        sp.position.set(x * T + 18 + rand() * (T - 36), y * T + 18 + rand() * (T - 36));
+        sp.rotation = (rand() - 0.5) * 0.8;
+        const sc = 0.62 + rand() * 0.25;
+        sp.scale.set(sc * (rand() < 0.5 ? -1 : 1), sc);
+        sp.label = key(x, y);
+        pieces.push(sp);
+      }
+    }
+    pieces.sort((a, b) => a.y - b.y).forEach((sp) => { chunkAt(sp.x, sp.y).addChild(sp); this.junk.push(sp); });
+
+    // decoración: la plana va en el trozo; árboles y arbustos, ordenados con las máquinas
     for (const d of state.world.decor) {
-      const s = new Sprite(this.tx[d.kind]);
-      s.position.set(d.x * T, d.y * T);
-      s.label = key(d.x, d.y);
-      this.decorLayer.addChild(s);
+      const sp = new Sprite(this.tx[d.kind]);
+      sp.anchor.set(0.5);
+      sp.position.set(d.x * T + HALF, d.y * T + HALF);
+      sp.label = key(d.x, d.y);
+      if (TALL_DECOR.includes(d.kind)) { sp.isDecor = true; sp.zIndex = d.y * T + HALF; this.tallLayer.addChild(sp); }
+      else { chunkAt(sp.x, sp.y).addChild(sp); this.flatDecor.push(sp); }
     }
+
+    // rejilla: un azulejo repetido, muy suave al mirar y más visible al construir
+    if (!this.tx.gridTile) {
+      const gt = new Graphics();
+      gt.rect(0, 0, T, 1.5).fill(0x24461f).rect(0, 0, 1.5, T).fill(0x24461f);
+      this.tx.gridTile = this.app.renderer.generateTexture({ target: gt, frame: new Rectangle(0, 0, T, T) });
+      gt.destroy();
+    }
+    this.grid.texture = this.tx.gridTile;
+    this.setBuildMode(this.buildMode || false);
+  }
+
+  // Oculta los trozos de suelo que no están en pantalla
+  cull() {
+    const z = this.zoom, { width, height } = this.app.screen;
+    const x0 = -this.world.x / z, y0 = -this.world.y / z, x1 = x0 + width / z, y1 = y0 + height / z;
+    for (const c of this.chunks) {
+      const [a, b, cc, d] = c.bounds;
+      c.visible = cc > x0 && a < x1 && d > y0 && b < y1;
+    }
+  }
+
+  // Al construir, la rejilla se ve más
+  setBuildMode(on) {
+    this.buildMode = on;
+    this.grid.visible = on;   // fuera del modo construir no se pinta (ahorra trabajo al móvil)
+    this.grid.alpha = 0.16;
   }
 
   // Crea/actualiza/borra sprites de edificios cuando cambia la estructura
@@ -97,33 +196,44 @@ export class Renderer {
       const e = state.entities[k];
       alive.add(e.id);
       occupied.add(k);
-      const upright = ANIMATED.includes(e.kind);
+      const upright = UPRIGHT.includes(e.kind);
       let s = this.sprites.get(e.id);
       if (!s) {
         if (upright) {
-          // máquina: cuerpo siempre derecho + rampa de salida que gira
+          // máquina: cuerpo siempre derecho (más alto que la casilla) + rampa de salida que gira
           s = new Container();
-          s.body = new Sprite(this.textureFor(e)); s.body.anchor.set(0.5);
-          s.chute = new Sprite(this.tx.chute); s.chute.anchor.set(0.5);
-          s.addChild(s.chute, s.body);
+          s.body = new Sprite(this.textureFor(e)); s.body.anchor.set(0.5, MACHINE_ANCHOR_Y);
+          s.addChild(s.body);
+          if (HAS_CHUTE.includes(e.kind)) { s.chute = new Sprite(this.tx.chute); s.chute.anchor.set(0.5); s.addChild(s.chute); }
+          this.tallLayer.addChild(s);
         } else {
           s = new Sprite(this.textureFor(e));
           s.anchor.set(0.5);
+          this.entityLayer.addChild(s);
         }
-        this.entityLayer.addChild(s);
         this.sprites.set(e.id, s);
       }
       s.position.set(e.x * T + HALF, e.y * T + HALF);
-      if (upright) s.chute.rotation = (e.dir * Math.PI) / 2;
-      else s.rotation = e.kind === 'teletransportador' ? 0 : (e.dir * Math.PI) / 2;
+      s.zIndex = e.y * T + HALF + 1;
+      if (s.chute) {
+        s.chute.rotation = (e.dir * Math.PI) / 2;
+        // hacia arriba la rampa quedaría en medio de la máquina: se sube por encima
+        s.chute.y = e.dir === 3 ? -TOP + 8 : 0;
+      }
+      if (!upright) s.rotation = (e.dir * Math.PI) / 2;
       if (e.kind === 'cinta' || e.kind === 'divisor') this.carriers.push([e, s, e.kind === 'cinta' ? beltShape(state, e) : null]);
       else this.machines.push([e, s]);
     }
     for (const [id, s] of this.sprites) {
       if (!alive.has(id)) { s.destroy({ children: true }); this.sprites.delete(id); }
     }
-    // la decoración se esconde bajo los edificios
-    for (const d of this.decorLayer.children) d.visible = !occupied.has(d.label);
+    // la decoración y la chatarra suelta se esconden bajo los edificios
+    for (const d of this.flatDecor) d.visible = !occupied.has(d.label);
+    for (const d of this.tallLayer.children) if (d.isDecor) d.visible = !occupied.has(d.label);
+    for (const d of this.junk) {
+      const e = state.entities[d.label];
+      d.visible = !e || e.kind === 'extractor'; // el extractor se planta encima del montón
+    }
   }
 
   textureFor(e) {
@@ -134,6 +244,7 @@ export class Renderer {
   // Se llama cada fotograma. alpha = fracción del tick actual (para suavizar).
   update(time, alpha) {
     this.sync();
+    this.cull();
     const lvl = this.state.levels?.cinta || 1;
     const frame = Math.floor(time * 10 * LEVEL_MULT[lvl]) % 4;
     const ahead = beltSpeed(lvl) * DT * alpha; // cuánto avanzan entre ticks
@@ -167,9 +278,9 @@ export class Renderer {
 
     // animación de las máquinas que están trabajando
     for (const [e, s] of this.machines) {
-      if (e.kind === 'teletransportador') { s.scale.set(1 + Math.sin(time * 3) * 0.03); continue; }
       let working = false;
-      if (e.kind === 'extractor') working = e.out.length < 4 && !!this.state.world.nodes[key(e.x, e.y)];
+      if (e.kind === 'teletransportador') working = true;
+      else if (e.kind === 'extractor') working = e.out.length < 4 && !!this.state.world.nodes[key(e.x, e.y)];
       else working = !!e.busy;
       const f = working ? (Math.floor(time * 9) + e.id) % 4 : 0;
       if (s.body) s.body.texture = this.tx[`${e.kind}_${f}`];
@@ -183,15 +294,16 @@ export class Renderer {
       if (!s) { s = new Sprite(); s.anchor.set(0.5); this.ghostLayer.addChild(s); this.ghostPool.push(s); }
       s.texture = g.kind === 'cinta' ? this.tx.belt0 : g.kind === 'borrar' ? this.tx.piedra : this.tx[g.kind];
       s.position.set(g.x * T + HALF, g.y * T + HALF);
-      const upright = ANIMATED.includes(g.kind);
-      s.rotation = g.kind === 'teletransportador' || upright ? 0 : (g.dir * Math.PI) / 2;
+      const upright = UPRIGHT.includes(g.kind);
+      s.anchor.set(0.5, upright ? MACHINE_ANCHOR_Y : 0.5);
+      s.rotation = upright ? 0 : (g.dir * Math.PI) / 2;
       s.alpha = 0.6;
       s.tint = g.valid ? 0xffffff : 0xff6b6b;
       s.visible = g.kind !== 'borrar';
       // rampa de salida del fantasma, para ver hacia dónde saldrá
       let c = this.ghostChutes[i];
       if (!c) { c = new Sprite(this.tx.chute); c.anchor.set(0.5); this.ghostLayer.addChildAt(c, 0); this.ghostChutes.push(c); }
-      c.visible = upright;
+      c.visible = HAS_CHUTE.includes(g.kind);
       c.position.copyFrom(s.position);
       c.rotation = (g.dir * Math.PI) / 2;
       c.alpha = 0.6;

@@ -55,16 +55,19 @@ export function generateWorld(seed) {
   // Zona despejada alrededor del teletransportador inicial
   for (let y = cy - 2; y <= cy + 2; y++) for (let x = cx - 2; x <= cx + 2; x++) delete nodes[key(x, y)];
 
-  // Decoración (no bloquea): árboles, flores, piedras
+  // Decoración (no bloquea): árboles, arbustos, flores, piedras, matas
   const decor = [];
   for (let y = 0; y < MAP_H; y++) {
     for (let x = 0; x < MAP_W; x++) {
       if (nodes[key(x, y)]) continue;
       if (Math.abs(x - cx) <= 3 && Math.abs(y - cy) <= 3) continue;
       const r = rand();
-      if (r < 0.035) decor.push({ x, y, kind: 'arbol' });
+      if (r < 0.02) decor.push({ x, y, kind: 'arbol' });
+      else if (r < 0.035) decor.push({ x, y, kind: 'arbol2' });
+      else if (r < 0.05) decor.push({ x, y, kind: 'arbusto' });
       else if (r < 0.09) decor.push({ x, y, kind: 'flor' });
       else if (r < 0.105) decor.push({ x, y, kind: 'piedra' });
+      else if (r < 0.16) decor.push({ x, y, kind: 'mata' });
     }
   }
 

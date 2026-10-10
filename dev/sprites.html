@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Muestrario de sprites</title>
+  <style>
+    body { margin: 0; background: #8cc56a; font-family: system-ui, sans-serif; }
+    p { margin: 8px 12px; color: #1f3b26; }
+  </style>
+</head>
+<body>
+  <p>Muestrario de sprites de Scrap Factory. Sirve para revisar el arte sin jugar. <code>?scale=2&amp;filter=belt</code></p>
+  <script type="module">
+    import { Application, Sprite, Text, Container } from '../vendor/pixi.min.mjs';
+    import { makeTextures } from '../src/textures.js';
+
+    const params = new URLSearchParams(location.search);
+    const scale = Number(params.get('scale') || 2);
+    const filter = params.get('filter') || '';
+    const cols = Number(params.get('cols') || 6);
+
+    const app = new Application();
+    await app.init({ width: cols * 96 * scale / 1.4, height: 400, background: '#8cc56a', antialias: true, resolution: 1 });
+    document.body.appendChild(app.canvas);
+    const t = makeTextures(app.renderer);
+    const keys = Object.keys(t).filter((k) => k.includes(filter) && !/^belt\d$/.test(k));
+    const cell = 96 * scale / 1.4;
+    keys.forEach((k, i) => {
+      const c = new Container();
+      c.x = (i % cols) * cell + 8;
+      c.y = Math.floor(i / cols) * (cell + 18) + 8;
+      const s = new Sprite(t[k]);
+      s.scale.set(scale);
+      c.addChild(s);
+      const label = new Text({ text: k, style: { fontSize: 12, fill: 0x1f3b26 } });
+      label.y = t[k].height * scale + 2;
+      c.addChild(label);
+      app.stage.addChild(c);
+    });
+    app.renderer.resize(app.screen.width, Math.ceil(keys.length / cols) * (cell + 18) + 24);
+    window.__ready = true;
+  </script>
+</body>
+</html>

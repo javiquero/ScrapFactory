@@ -82,7 +82,7 @@ button:focus-visible { outline: 3px solid var(--sun); outline-offset: 2px; }
   border: 2px solid #fff;
   box-shadow: 0 2px 0 rgba(31, 59, 38, 0.35);
 }
-.order-icon { width: 38px; height: 38px; image-rendering: auto; }
+.order-icon { width: 38px; height: 38px; object-fit: contain; }
 .order-text { flex: 1; min-width: 0; }
 .order-title { font-weight: 600; font-size: 15px; line-height: 1.1; }
 .order-count { font-size: 13px; color: var(--ink-soft); margin-top: 1px; }
@@ -157,7 +157,7 @@ button:focus-visible { outline: 3px solid var(--sun); outline-offset: 2px; }
   border-radius: 16px;
   box-shadow: 0 3px 0 var(--forest);
 }
-.inspect-icon { width: 40px; height: 40px; }
+.inspect-icon { width: 40px; height: 40px; object-fit: contain; }
 .inspect-body { flex: 1; min-width: 0; }
 .inspect-name { font-weight: 600; font-size: 15px; }
 .inspect-info { font-size: 13px; line-height: 1.25; color: var(--ink-soft); }
@@ -211,7 +211,7 @@ button:focus-visible { outline: 3px solid var(--sun); outline-offset: 2px; }
   color: var(--lichen);
   transition: background 0.12s;
 }
-.tool img, .tool svg { width: 30px; height: 30px; display: block; }
+.tool img, .tool svg { width: 30px; height: 30px; display: block; object-fit: contain; }
 .tool span {
   font-size: 10.5px;
   letter-spacing: -0.01em;
@@ -271,7 +271,7 @@ button:focus-visible { outline: 3px solid var(--sun); outline-offset: 2px; }
   margin-bottom: 6px;
   box-shadow: 0 2px 0 var(--lichen-2);
 }
-.entry img { width: 44px; height: 44px; flex: none; }
+.entry img { width: 44px; height: 44px; flex: none; object-fit: contain; }
 .entry b { display: block; font-weight: 600; font-size: 16px; }
 .entry small { display: block; font-size: 13px; color: var(--ink-soft); line-height: 1.3; }
 .entry small i { display: block; font-style: normal; font-weight: 500; color: var(--forest-2); margin-top: 2px; }
