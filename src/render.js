@@ -293,7 +293,7 @@ export class Renderer {
     }
   }
 
-  setGhosts(list) {
+  setGhosts(list, area = null) {
     let i = 0;
     for (const g of list) {
       let s = this.ghostPool[i];
@@ -321,9 +321,15 @@ export class Renderer {
     // marco de las casillas afectadas
     const h = this.highlight;
     h.clear();
+    if (area) {
+      // zona que se va a borrar
+      const x = area.x0 * T, y = area.y0 * T, w = (area.x1 - area.x0 + 1) * T, hh = (area.y1 - area.y0 + 1) * T;
+      h.roundRect(x + 1, y + 1, w - 2, hh - 2, 12).fill({ color: 0xff6b6b, alpha: 0.16 }).stroke({ width: 3, color: 0xff6b6b, alpha: 0.9 });
+    }
     for (const g of list) {
       const color = g.kind === 'borrar' ? 0xff6b6b : g.valid ? 0xffd84a : 0xff6b6b;
       h.roundRect(g.x * T + 2, g.y * T + 2, T - 4, T - 4, 10).stroke({ width: 3, color, alpha: 0.95 });
+      if (g.kind === 'borrar') h.roundRect(g.x * T + 6, g.y * T + 6, T - 12, T - 12, 8).fill({ color: 0xff6b6b, alpha: 0.28 });
     }
   }
 
@@ -344,6 +350,7 @@ export class Renderer {
   }
 
   pan(dx, dy) {
+    this.panned = (this.panned || 0) + Math.abs(dx) + Math.abs(dy); // para el tutorial
     this.world.x += dx;
     this.world.y += dy;
     this.clamp();

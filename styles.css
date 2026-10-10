@@ -148,6 +148,28 @@ button:focus-visible { outline: 3px solid var(--sun); outline-offset: 2px; }
 .wallet svg { width: 24px; height: 24px; }
 .wallet.paid { animation: bump 0.5s ease-out; }
 
+/* ---------- Tutorial ---------- */
+.tutorial {
+  pointer-events: auto;
+  align-self: flex-start;
+  margin-top: 8px;
+  max-width: min(340px, calc(100vw - 20px));
+  padding: 9px 12px 10px;
+  background: var(--forest);
+  color: var(--lichen);
+  border-radius: 14px;
+  border: 2px solid var(--sun);
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.25);
+}
+.tutorial.tut-new { animation: bump 0.5s ease-out; }
+.tut-step { font-size: 12px; font-weight: 600; color: var(--sun); }
+.tut-text { margin: 2px 0 6px; font-size: 15px; line-height: 1.3; }
+.tut-skip { background: none; color: var(--lichen-2); font: inherit; font-size: 12px; text-decoration: underline; padding: 0; }
+/* lo que el tutorial señala */
+.tut { animation: tutPulse 1.1s ease-in-out infinite; }
+@keyframes tutPulse { 50% { box-shadow: 0 0 0 4px var(--sun); } }
+.tool:disabled { opacity: 0.35; }
+
 /* ---------- Comunicado de la corporación ---------- */
 .memo {
   position: fixed;
@@ -347,11 +369,12 @@ button:focus-visible { outline: 3px solid var(--sun); outline-offset: 2px; }
 .buy:not(:disabled):active { transform: translateY(1px); box-shadow: 0 1px 0 var(--forest); }
 .max { font-size: 12px; font-weight: 600; color: var(--forest-2); text-align: center; }
 .panel-money { font-size: 15px; font-weight: 600; background: var(--sun); border: 2px solid var(--forest); border-radius: 99px; padding: 1px 9px; margin-left: 6px; vertical-align: 3px; }
+.panel-foot .chip { margin: 0 6px 6px 0; }
 .panel-foot { padding: 12px 16px calc(14px + var(--safe-b)); border-top: 2px dashed var(--lichen-2); }
 .panel-note { font-size: 12px; color: var(--ink-soft); margin: 8px 0 0; }
 
 @media (prefers-reduced-motion: reduce) {
-  .launch { animation: none; }
+  .launch, .tut, .tutorial.tut-new { animation: none; }
   .panel, .order-fill { transition: none; }
   .memo, .order.done { animation: none; }
 }

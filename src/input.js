@@ -62,7 +62,12 @@ export function attachInput(canvas, { renderer, getState, ctl, dispatch, onTapEn
       gesture.cells = beltPath(gesture.startTile, gesture.lastTile, ctl.dir);
       renderer.setGhosts(ghostsFor(gesture.cells, 'cinta'));
     } else if (t === 'borrar') {
-      renderer.setGhosts(ghostsFor(gesture.cells, 'borrar'));
+      // Quitar por área: rectángulo entre donde empezaste y donde tienes el dedo
+      const a = gesture.startTile, b = gesture.lastTile;
+      gesture.cells = [];
+      for (let y = Math.min(a.y, b.y); y <= Math.max(a.y, b.y); y++) for (let x = Math.min(a.x, b.x); x <= Math.max(a.x, b.x); x++) gesture.cells.push({ x, y });
+      const full = ghostsFor(gesture.cells, 'borrar').filter((c) => c.valid);
+      renderer.setGhosts(full, { x0: Math.min(a.x, b.x), y0: Math.min(a.y, b.y), x1: Math.max(a.x, b.x), y1: Math.max(a.y, b.y) });
     } else if (t !== 'mano') {
       renderer.setGhosts(ghostsFor(gesture.cells.map((c) => ({ ...c, dir: ctl.dir })), t));
     }
@@ -136,7 +141,7 @@ export function attachInput(canvas, { renderer, getState, ctl, dispatch, onTapEn
     const tile = renderer.screenToTile(p.x, p.y);
     if (tile.x === gesture.lastTile.x && tile.y === gesture.lastTile.y) return;
     gesture.lastTile = tile;
-    if (ctl.tool !== 'cinta') {
+    if (ctl.tool !== 'cinta' && ctl.tool !== 'borrar') {
       // modo "pintar": cada casilla nueva que pisas
       const k = key(tile.x, tile.y);
       if (!gesture.seen.has(k)) { gesture.seen.add(k); gesture.cells.push(tile); }

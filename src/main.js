@@ -10,6 +10,7 @@ import { attachInput } from './input.js';
 import { UI } from './ui.js';
 import { key } from './world.js';
 import * as msg from './messages.js';
+import { Tutorial } from './tutorial.js';
 
 const SAVE_KEY = 'scrapfactory.save.v2';
 const CAM_KEY = 'scrapfactory.cam.v1';
@@ -60,12 +61,30 @@ async function boot() {
 
   // Único punto por el que cambia la partida. En multijugador, aquí se enviará
   // la acción al servidor y se aplicarán también las que lleguen de los demás.
+  const undoStack = [];
   function dispatch(action, explain = false) {
     const res = applyAction(state, action);
     if (!res.ok && explain) ui.hint(res.reason);
     if (res.ok) ui.refreshInspect(state);
+    if (res.ok && res.undo) {
+      undoStack.push(res.undo);
+      if (undoStack.length > 50) undoStack.shift();
+      ui.setUndo(true);
+    }
+    if (res.ok && action.type === 'rotate' && tut) tut.flags.rotated = true;
     return res;
   }
+  function undo() {
+    const a = undoStack.pop();
+    ui.setUndo(undoStack.length > 0);
+    if (!a) return;
+    applyAction(state, a);
+    ui.hideInspect();
+    renderer.setSelected(null);
+    ui.hint('Deshecho');
+  }
+  function clearUndo() { undoStack.length = 0; ui.setUndo(false); }
+  let tut = null;
 
   function selectTool(tool, fromPanel = false) {
     ctl.tool = tool;
@@ -90,7 +109,11 @@ async function boot() {
     icons,
     ctl,
     onSelectTool: selectTool,
-    onRotateTool: () => { ctl.dir = (ctl.dir + 1) % 4; ui.renderBar(state); },
+    onUndo: undo,
+    onTutorial: (what) => {
+      if (what === 'again') { tut.start(); tut.flags.panned = 0; panBase = renderer.panned || 0; ui.renderBar(state); }
+      else { tut.stop(); ui.renderBar(state); }
+    },
     onInspectRotate: () => {
       const e = ui.inspected;
       if (e) dispatch({ type: 'rotate', x: e.x, y: e.y }, true);
@@ -112,6 +135,9 @@ async function boot() {
       ui.renderBar(state);
       ui.renderOrder(state, true);
       ui.clearMemos();
+      clearUndo();
+      tut.start(); panBase = renderer.panned || 0;
+      ui.renderBar(state);
       welcome();
       save();
     },
@@ -168,6 +194,7 @@ async function boot() {
   });
 
   window.addEventListener('keydown', (ev) => {
+    if ((ev.key === 'z' || ev.key === 'Z') && (ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); undo(); return; }
     if (ev.key === 'r' || ev.key === 'R') { ctl.dir = (ctl.dir + 1) % 4; ui.renderBar(state); }
     if (ev.key === 'Escape') { selectTool('mano'); ui.closePanel(); }
   });
@@ -176,7 +203,6 @@ async function boot() {
   function welcome() {
     for (const m of msg.WELCOME) ui.memo(m);
     ui.memo(msg.orderIntro(currentOrder(state)));
-    ui.memo(msg.TIPS[0]);
   }
   let lastWrong = -1e9;
   function flushEvents() {
@@ -198,6 +224,7 @@ async function boot() {
         ui.renderBar(state);
         ui.renderOrder(state, true);
         ui.clearMemos();
+        clearUndo();
         for (const m of msg.planetIntro(state)) ui.memo(m);
         ui.memo(msg.orderIntro(currentOrder(state)));
       } else if (ev.type === 'bought') {
@@ -220,6 +247,11 @@ async function boot() {
     }
     state.events.length = 0;
   }
+  // Tutorial: arranca solo en partidas nuevas (o si se pide desde el catálogo)
+  let panBase = renderer.panned || 0;
+  tut = new Tutorial({ ui, store });
+  if (isNew) tut.start();
+  else tut.render();
   if (isNew) welcome();
   else ui.memo('Bienvenido de vuelta, colono. La fábrica no se ha movido. Tus créditos tampoco: siguen donde los dejaste.');
   setInterval(() => { if (document.getElementById('memo').hidden) ui.memo(msg.randomTip()); }, 90000);
@@ -247,7 +279,12 @@ async function boot() {
     flushEvents();
     renderer.update(time, acc / DT);
     ui.renderOrder(state);
-    if ((inspectTick = (inspectTick + 1) % 15) === 0) { ui.refreshInspect(state); ui.refreshPanelMoney(state); }
+    if ((inspectTick = (inspectTick + 1) % 15) === 0) {
+      ui.refreshInspect(state);
+      ui.refreshPanelMoney(state);
+      tut.flags.panned = (renderer.panned || 0) - panBase;
+      if (tut.check(state)) ui.renderBar(state);
+    }
   });
 
   window.addEventListener('resize', () => renderer.clamp());

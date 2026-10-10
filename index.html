@@ -29,6 +29,11 @@
       <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9.5" fill="#ffd84a" stroke="#1f3b26" stroke-width="2"/><circle cx="12" cy="12" r="5.5" fill="none" stroke="#c99a1e" stroke-width="1.6"/><path d="M13.6 9.6a2.6 2.6 0 1 0 0 4.8" fill="none" stroke="#1f3b26" stroke-width="1.8" stroke-linecap="round"/></svg>
       <span id="walletAmount">0 ₡</span>
     </button>
+    <section class="tutorial" id="tutorial" hidden aria-live="polite">
+      <div class="tut-step" id="tutStep">Tutorial</div>
+      <p class="tut-text" id="tutText"></p>
+      <button class="tut-skip" id="tutSkip">Saltar tutorial</button>
+    </section>
   </header>
 
   <div class="memo" id="memo" role="status" hidden>
@@ -59,6 +64,7 @@
     </div>
     <div class="panel-list" id="panelList"></div>
     <div class="panel-foot">
+      <button class="chip" id="tutAgain">Repetir tutorial</button>
       <button class="chip chip-danger" id="resetBtn">Empezar partida nueva</button>
       <p class="panel-note">Chatarrex solo paga lo que pide el pedido: cada pieza y un extra al completarlo. Se guarda solo.</p>
     </div>

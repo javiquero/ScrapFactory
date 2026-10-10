@@ -9,6 +9,7 @@ const $ = (id) => document.getElementById(id);
 
 const SVG = {
   mano: '<svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M11 17V8a2 2 0 0 1 4 0v7M15 14V6a2 2 0 0 1 4 0v8M19 14V8a2 2 0 0 1 4 0v9c0 6-3.5 10-8.5 10-3.5 0-5.5-2-7.5-5l-2.5-4a2 2 0 0 1 3.2-2.4L11 18"/></svg>',
+  deshacer: '<svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13h11a6 6 0 0 1 0 12h-6"/><path d="M14 8l-5 5 5 5"/></svg>',
   girar: '<svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M25 16a9 9 0 1 1-3-6.7"/><path d="M23 4v6h-6"/></svg>',
   borrar: '<svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9h20M13 9V6h6v3M9 9l1.5 17h11L23 9M14 14v8M18 14v8"/></svg>',
   mas: '<svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><rect x="5" y="5" width="9" height="9" rx="2.5"/><rect x="18" y="5" width="9" height="9" rx="2.5"/><rect x="5" y="18" width="9" height="9" rx="2.5"/><path d="M22.5 18v9M18 22.5h9"/></svg>',
@@ -21,10 +22,13 @@ function firstPlanet(kind) {
 }
 
 export class UI {
-  constructor({ icons, ctl, onSelectTool, onRotateTool, onInspectRotate, onInspectRemove, onReset, onLaunch, onBuy, onUpgrade, getState }) {
+  constructor({ icons, ctl, onSelectTool, onUndo, onInspectRotate, onInspectRemove, onReset, onLaunch, onBuy, onUpgrade, onTutorial, getState }) {
     this.icons = icons;
     this.ctl = ctl;
-    this.cb = { onSelectTool, onRotateTool, onInspectRotate, onInspectRemove, onReset, onLaunch, onBuy, onUpgrade };
+    this.cb = { onSelectTool, onUndo, onInspectRotate, onInspectRemove, onReset, onLaunch, onBuy, onUpgrade, onTutorial };
+    this.canUndo = false;
+    this.tutTool = null;     // herramienta que el tutorial está señalando
+    this.tutShop = null;     // y lo que hay que comprar en el catálogo
     this.lastMoney = -1;
     $('launchBtn').addEventListener('click', () => this.cb.onLaunch());
     $('wallet').addEventListener('click', () => this.openPanel(getState()));
@@ -39,6 +43,8 @@ export class UI {
     $('inspectClose').addEventListener('click', () => this.hideInspect());
     $('inspectRotate').addEventListener('click', () => this.cb.onInspectRotate());
     $('inspectRemove').addEventListener('click', () => this.cb.onInspectRemove());
+    $('tutSkip').addEventListener('click', () => this.cb.onTutorial('skip'));
+    $('tutAgain').addEventListener('click', () => { this.closePanel(); this.cb.onTutorial('again'); });
     $('resetBtn').addEventListener('click', () => {
       if (confirm('¿Empezar una partida nueva? Se pierde la fábrica actual.')) { this.closePanel(); this.cb.onReset(); }
     });
@@ -48,21 +54,47 @@ export class UI {
   renderBar(state) {
     const bar = $('bar');
     const { tool, dir } = this.ctl;
-    const recent = this.ctl.recent.filter((k) => state.unlocked.includes(k)).slice(0, 3);
+    let recent = this.ctl.recent.filter((k) => state.unlocked.includes(k)).slice(0, 3);
+    // lo que señala el tutorial tiene que estar en la barra
+    if (this.tutTool && BUILDINGS[this.tutTool] && this.tutTool !== 'cinta' && state.unlocked.includes(this.tutTool) && !recent.includes(this.tutTool)) recent = [this.tutTool, ...recent.slice(0, 2)];
     const btn = (id, label, iconHtml, extra = '') =>
-      `<button class="tool ${extra}" data-tool="${id}" aria-pressed="${tool === id}" title="${label}">${iconHtml}<span>${label}</span></button>`;
+      `<button class="tool ${extra} ${this.tutTool === id ? 'tut' : ''}" data-tool="${id}" aria-pressed="${tool === id}" title="${label}">${iconHtml}<span>${label}</span></button>`;
     const img = (k) => `<img src="${this.icons[k] || ''}" alt="">`;
     let html = btn('mano', 'Mover', SVG.mano);
     html += btn('cinta', 'Cinta', img('cinta'));
     for (const k of recent) html += btn(k, BUILDINGS[k].short, img(k));
     html += '<span class="sep" aria-hidden="true"></span>';
-    html += `<button class="tool" data-act="rotate" title="Girar (R)"><span style="display:block;transform:rotate(${dir * 90}deg)">${SVG.girar}</span><span>Girar</span></button>`;
+    html += `<button class="tool" data-act="undo" title="Deshacer (Ctrl+Z)" ${this.canUndo ? '' : 'disabled'}>${SVG.deshacer}<span>Deshacer</span></button>`;
     html += btn('borrar', 'Quitar', SVG.borrar);
-    html += `<button class="tool more" data-act="panel" title="Catálogo">${SVG.mas}<span>Más</span></button>`;
+    html += `<button class="tool more ${this.tutTool === 'panel' ? 'tut' : ''}" data-act="panel" title="Catálogo">${SVG.mas}<span>Más</span></button>`;
     bar.innerHTML = html;
     bar.querySelectorAll('[data-tool]').forEach((b) => b.addEventListener('click', () => this.cb.onSelectTool(b.dataset.tool)));
-    bar.querySelector('[data-act=rotate]').addEventListener('click', () => this.cb.onRotateTool());
+    bar.querySelector('[data-act=undo]').addEventListener('click', () => this.cb.onUndo());
     bar.querySelector('[data-act=panel]').addEventListener('click', () => this.openPanel(state));
+  }
+
+  setUndo(on) {
+    this.canUndo = on;
+    const b = document.querySelector('#bar [data-act=undo]');
+    if (b) b.disabled = !on;
+  }
+
+  // ---- Tutorial: una tarjeta con el paso actual ----
+  showTutorial(step, index, total) {
+    const el = $('tutorial');
+    if (!step) { el.hidden = true; this.placeMemo(); return; }
+    $('tutStep').textContent = `Tutorial · paso ${index + 1} de ${total}`;
+    $('tutText').textContent = step.text;
+    $('tutSkip').textContent = step.last ? '¡Entendido!' : 'Saltar tutorial';
+    el.hidden = false;
+    el.classList.remove('tut-new'); void el.offsetWidth; el.classList.add('tut-new');
+    this.placeMemo();
+  }
+
+  // Los comunicados van debajo de lo que haya arriba (dinero o tutorial)
+  placeMemo() {
+    const below = !$('tutorial').hidden ? $('tutorial') : $('wallet');
+    $('memo').style.top = `${below.getBoundingClientRect().bottom + 10}px`;
   }
 
   // ---- Catálogo lateral: elegir, comprar y mejorar ----
@@ -98,7 +130,7 @@ export class UI {
             <div class="entry-side">${side}</div></div>`;
         } else if (shop.includes(k)) {
           rows += `<div class="entry locked"><div class="entry-main">${img}<span><b>${b.name}</b>${flow}<small>${b.desc}</small></span></div>
-            <div class="entry-side"><button class="buy" data-buy="${k}" data-cost="${b.price}" ${coins < b.price ? 'disabled' : ''}>Comprar<small>${money(b.price)}</small></button></div></div>`;
+            <div class="entry-side"><button class="buy ${this.tutShop === k ? 'tut' : ''}" data-buy="${k}" data-cost="${b.price}" ${coins < b.price ? 'disabled' : ''}>Comprar<small>${money(b.price)}</small></button></div></div>`;
         } else {
           const p = firstPlanet(k);
           rows += `<div class="entry locked soon"><div class="entry-main">${img}<span><b>${b.name}</b>${flow}<small>${p == null ? 'Próximamente.' : `Se vende en el planeta ${p + 1}.`}</small></span></div></div>`;
@@ -216,7 +248,7 @@ export class UI {
     if (!text) { $('memo').hidden = true; return; }
     $('memoText').textContent = text;
     // el comunicado va justo debajo de la etiqueta del pedido, que cambia de alto
-    $('memo').style.top = `${$('wallet').getBoundingClientRect().bottom + 10}px`;
+    this.placeMemo();
     $('memo').hidden = false;
     const ms = Math.min(11000, 3500 + text.length * 45);
     this.memoTimer = setTimeout(() => this.nextMemo(), ms);

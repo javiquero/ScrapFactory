@@ -100,7 +100,36 @@ export function canPlace(state, kind, x, y) {
 // ---- Acciones ----------------------------------------------------------------
 // Todas devuelven { ok, reason? }. Nunca lanzan.
 
+// Acciones de construcción que se pueden deshacer, y las casillas que tocan
+function touched(action) {
+  switch (action.type) {
+    case 'place': case 'rotate': return [{ x: action.x, y: action.y }];
+    case 'placeMany': case 'remove': return action.cells;
+    default: return null;
+  }
+}
+
+const clone = (o) => (o == null ? null : JSON.parse(JSON.stringify(o)));
+
+// Aplica la acción. Si es de construcción y sale bien, devuelve también `undo`:
+// otra acción plana ({ type: 'setCells', ... }) que deja esas casillas como estaban.
 export function applyAction(state, action) {
+  const cells = touched(action);
+  if (!cells) return apply(state, action);
+  const seen = new Set();
+  const before = [];
+  for (const c of cells) {
+    const k = key(c.x, c.y);
+    if (seen.has(k)) continue;
+    seen.add(k);
+    before.push({ x: c.x, y: c.y, e: clone(state.entities[k]) });
+  }
+  const res = apply(state, action);
+  if (res.ok) res.undo = { type: 'setCells', cells: before };
+  return res;
+}
+
+function apply(state, action) {
   switch (action.type) {
     case 'place': return placeOne(state, action.kind, action.x, action.y, action.dir);
     case 'placeMany': {
@@ -160,6 +189,21 @@ export function applyAction(state, action) {
       state.orderProgress = 0;
       state.rev++;
       state.events.push({ type: 'planetStart', planet: p });
+      return { ok: true };
+    }
+    case 'setCells': {
+      // Deshacer: cada casilla vuelve a como estaba. Si sigue el mismo edificio,
+      // solo se le devuelve la orientación (lo que lleva encima sigue su camino).
+      for (const c of action.cells) {
+        const k = key(c.x, c.y);
+        const now = state.entities[k];
+        if (!c.e) { delete state.entities[k]; continue; }
+        if (isShip(state, c.x, c.y)) continue;
+        if (now && now.id === c.e.id) { now.dir = c.e.dir; resettle(now); continue; }
+        state.entities[k] = clone(c.e);
+        if (c.e.id >= state.nextId) state.nextId = c.e.id + 1;
+      }
+      state.rev++;
       return { ok: true };
     }
     case 'rotate': {

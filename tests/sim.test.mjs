@@ -474,4 +474,37 @@ for (const lvl of [1, 2, 3]) {
   console.log('✓ rescate con engranajes a 2,5/s');
 }
 
+// 22) Deshacer: cada acción de construcción devuelve otra acción plana que la revierte
+{
+  const s = createGame(61);
+  own(s, 'prensa');
+  const X = 8, Y = 8;
+  for (let x = X - 1; x <= X + 5; x++) for (let y = Y - 1; y <= Y + 3; y++) { delete s.world.nodes[key(x, y)]; delete s.entities[key(x, y)]; }
+  const cells = [0, 1, 2, 3].map((i) => ({ x: X + i, y: Y, dir: 0 }));
+  const a = applyAction(s, { type: 'placeMany', kind: 'cinta', cells });
+  assert.ok(a.undo && a.undo.type === 'setCells');
+  // máquina encima de una cinta, y deshacer: vuelve la cinta
+  const b = applyAction(s, { type: 'place', kind: 'prensa', x: X + 1, y: Y, dir: 0 });
+  assert.equal(s.entities[key(X + 1, Y)].kind, 'prensa');
+  applyAction(s, JSON.parse(JSON.stringify(b.undo)));   // viaja como JSON, igual que por la red
+  assert.equal(s.entities[key(X + 1, Y)].kind, 'cinta', 'vuelve la cinta');
+  // girar y deshacer
+  const c = applyAction(s, { type: 'rotate', x: X + 2, y: Y });
+  assert.equal(s.entities[key(X + 2, Y)].dir, 1);
+  applyAction(s, c.undo);
+  assert.equal(s.entities[key(X + 2, Y)].dir, 0);
+  // borrar un área y deshacer: vuelve todo
+  const area = [];
+  for (let x = X - 1; x <= X + 4; x++) for (let y = Y - 1; y <= Y + 1; y++) area.push({ x, y });
+  const d = applyAction(s, { type: 'remove', cells: area });
+  assert.equal(Object.keys(s.entities).length, 0);
+  applyAction(s, d.undo);
+  assert.equal(Object.keys(s.entities).length, 4, 'las 4 cintas vuelven');
+  // y deshacer la primera colocación las quita
+  applyAction(s, a.undo);
+  assert.equal(Object.keys(s.entities).length, 0);
+  assert.equal(applyAction(s, { type: 'buy', kind: 'divisor' }).undo, undefined, 'las compras no se deshacen');
+  console.log('✓ deshacer: colocar, sustituir, girar y borrar por área');
+}
+
 console.log('Todo OK');

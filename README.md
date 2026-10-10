@@ -10,7 +10,10 @@ Inspirado en Builderment, pero en el navegador: funciona igual en el móvil que 
 - **Tocar un edificio** lo gira (con cualquier herramienta menos Quitar). **Mantenerlo pulsado** lo copia (el siguiente toque pone otro igual, con la misma orientación) y abre su ficha para girarlo o quitarlo.
 - **Cinta**: arrastra el dedo desde donde empieza hasta donde acaba; se traza sola en forma de L.
 - **Edificios**: tócalos sobre el mapa, o arrastra para colocar varios seguidos. Encima de una cinta, la sustituyen. Al soltar el dedo vuelves a la mano; lo elegido sigue en la barra para repetir.
-- **Dos dedos**: mover y hacer zoom con cualquier herramienta. En ordenador, rueda del ratón para el zoom y `R` para girar.
+- **Quitar**: toca un edificio, o arrastra para marcar un rectángulo y quitar todo lo que haya dentro.
+- **Deshacer**: revierte lo último que construiste, giraste o quitaste (hasta 50 pasos; también `Ctrl+Z`). Las compras no se deshacen.
+- **Dos dedos**: mover y hacer zoom con cualquier herramienta. En ordenador, rueda del ratón para el zoom y `R` para cambiar la orientación de lo que vas a colocar.
+- **Tutorial**: sale solo en partidas nuevas (moverse, extraer, girar, cintas y los dos primeros pedidos). Se puede repetir desde el catálogo.
 - **Nave**: 2×2 casillas, fija. Recibe por los cuatro lados (dos entradas por lado). Tocarla muestra lo enviado.
 - **Más** (o tocar el dinero): catálogo. Ahí se eligen, se **compran** y se **mejoran** los edificios. Lo que eliges pasa a la barra de abajo.
 
