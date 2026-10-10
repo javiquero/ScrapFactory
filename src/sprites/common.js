@@ -51,14 +51,16 @@ export const rgrad = (inner, outer, cx = 0.5, cy = 0.5) => new FillGradient({
   textureSpace: 'local',
 });
 
-// Dibuja y convierte en textura. `draw(g, sh)`: g es el dibujo, sh una capa de
-// sombra que se difumina para que quede suave.
+// Dibuja y convierte en textura. `draw(g, sh, mid)`: g es el dibujo, sh una capa de
+// sombra que se difumina para que quede suave, y mid un contenedor entre ambas
+// donde se pueden poner imágenes (arte en PNG).
 export function tex(renderer, draw, w = T, h = w, blur = 3) {
   const root = new Container();
   const sh = new Graphics();
+  const mid = new Container();
   const g = new Graphics();
-  root.addChild(sh, g);
-  draw(g, sh);
+  root.addChild(sh, mid, g);
+  draw(g, sh, mid);
   if (sh.getLocalBounds().width > 0) sh.filters = [new BlurFilter({ strength: blur, quality: 3 })];
   const t = renderer.generateTexture({ target: root, frame: new Rectangle(0, 0, w, h), resolution: 2, antialias: true });
   root.destroy({ children: true });

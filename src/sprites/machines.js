@@ -4,6 +4,7 @@
 // Las máquinas NO se giran; la salida es una rampa aparte ("chute") que sí gira.
 // Cada una tiene 4 fotogramas: <tipo>_0 .. <tipo>_3.
 
+import { placeArt } from './art.js';
 import { C, T, TALL, TOP, tex, grad, vgrad, hgrad, cyl, rgrad, rivet, line, block, hazard, rustStain } from './common.js';
 
 const { INK, SHADOW } = C;
@@ -200,10 +201,56 @@ function chute(g, s) {
   g.poly([52, 26, 60, 32, 52, 38]).fill(C.BUTTER).stroke({ width: 1.2, color: INK });
 }
 
-export function makeMachines(renderer, t) {
+// ---------------------------------------------------------------------------
+// Versión con arte en PNG: la imagen + efectos animados dibujados por código
+// ---------------------------------------------------------------------------
+const BOTTOM = TALL - 3;
+const ART = {
+  extractor(g, s, mid, f, tex) {
+    s.ellipse(32, BOTTOM - 4, 30, 9).fill({ color: SHADOW, alpha: 0.4 });
+    placeArt(mid, tex, { cx: 32, bottom: BOTTOM, w: 62, h: 84, dx: [0, 0.7, 0, -0.7][f], dy: [0, -0.6, 0, -0.3][f] });
+    // trozos que salta la broca
+    const bits = [[[-9, -6], [7, -10], [-3, -14]], [[-6, -11], [10, -6], [2, -16]], [[-11, -4], [5, -13], [-1, -19]], [[-7, -9], [9, -8], [3, -12]]][f];
+    for (const [dx, dy] of bits) g.poly([28 + dx - 2, BOTTOM - 8 + dy, 28 + dx, BOTTOM - 10 + dy, 28 + dx + 2.5, BOTTOM - 8 + dy, 28 + dx, BOTTOM - 6.5 + dy]).fill(0xb3aa9c).stroke({ width: 0.8, color: INK });
+    g.circle(28, BOTTOM - 6, 4 + f).fill({ color: 0xc9b89a, alpha: 0.35 - f * 0.06 });
+  },
+  prensa(g, s, mid, f, tex) {
+    s.roundRect(6, BOTTOM - 12, 54, 14, 6).fill({ color: SHADOW, alpha: 0.4 });
+    placeArt(mid, tex, { cx: 32, bottom: BOTTOM, w: 62, h: 84, sy: [1, 0.985, 0.965, 0.985][f] });
+    if (f === 2) for (const dx of [-17, 17]) { g.circle(32 + dx, BOTTOM - 26, 4).fill({ color: 0xffffff, alpha: 0.65 }); g.circle(32 + dx * 1.2, BOTTOM - 31, 3).fill({ color: 0xffffff, alpha: 0.4 }); }
+  },
+  ensambladora(g, s, mid, f, tex) {
+    s.roundRect(2, BOTTOM - 14, 60, 16, 7).fill({ color: SHADOW, alpha: 0.4 });
+    placeArt(mid, tex, { cx: 32, bottom: BOTTOM, w: 63, h: 80 });
+    // chispas de soldadura alrededor del engranaje
+    if (f % 2) {
+      const cx = 31, cy = BOTTOM - 20;
+      for (let k = 0; k < 7; k++) {
+        const a = -Math.PI / 2 + (k - 3) * 0.5 + f * 0.2;
+        line(g, cx, cy, cx + Math.cos(a) * 7, cy + Math.sin(a) * 7, 1.1, k % 2 ? 0xfff6c0 : 0xffb03a);
+      }
+      g.circle(cx, cy, 3).fill({ color: 0xfff6c0, alpha: 0.8 });
+    }
+  },
+  teletransportador(g, s, mid, f, tex) {
+    s.ellipse(33, BOTTOM - 8, 31, 10).fill({ color: SHADOW, alpha: 0.4 });
+    placeArt(mid, tex, { cx: 32, bottom: BOTTOM, w: 64, h: 60 });
+    const ringY = BOTTOM - 22;
+    const alpha = [0.35, 0.5, 0.42, 0.55][f];
+    g.poly([18, ringY, 46, ringY, 41, 0, 23, 0]).fill(grad([[0, 'rgba(127,227,224,0.6)'], [1, 'rgba(255,255,255,0)']], 0, 1, 0, 0));
+    g.poly([26, ringY, 38, ringY, 35, 6, 29, 6]).fill({ color: 0xffffff, alpha });
+    for (const [x, y] of [[25, 50 - f * 9], [38, 40 - f * 7], [31, 60 - f * 10]]) if (y > 2) g.circle(x, y, 1.4).fill(0xffffff);
+  },
+};
+
+export function makeMachines(renderer, t, art = {}) {
   const DRAW = { extractor, prensa, ensambladora, teletransportador };
   for (const kind of UPRIGHT) {
-    for (let f = 0; f < 4; f++) t[`${kind}_${f}`] = tex(renderer, (g, s) => DRAW[kind](g, s, f), T, TALL);
+    for (let f = 0; f < 4; f++) {
+      t[`${kind}_${f}`] = art[kind]
+        ? tex(renderer, (g, s, mid) => ART[kind](g, s, mid, f, art[kind]), T, TALL)
+        : tex(renderer, (g, s) => DRAW[kind](g, s, f), T, TALL);
+    }
     t[kind] = t[`${kind}_0`];
   }
   t.chute = tex(renderer, chute);

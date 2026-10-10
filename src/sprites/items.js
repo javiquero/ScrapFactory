@@ -1,6 +1,7 @@
 // Sprites de los objetos que viajan por las cintas (32 px).
 
 import { ITEMS } from '../defs.js';
+import { placeArt } from './art.js';
 import { C, tex, grad, vgrad, rgrad, rivet, line, rustStain } from './common.js';
 
 const { INK, SHADOW } = C;
@@ -39,6 +40,11 @@ const DRAW = {
   },
 };
 
-export function makeItems(renderer, t) {
-  for (const type in ITEMS) t['item_' + type] = tex(renderer, DRAW[type], 32, 32, 1.5);
+export function makeItems(renderer, t, art = {}) {
+  for (const type in ITEMS) {
+    const png = art['item_' + type];
+    t['item_' + type] = png
+      ? tex(renderer, (g, s, mid) => { s.ellipse(16, 25, 10, 4).fill({ color: SHADOW, alpha: 0.4 }); placeArt(mid, png, { cx: 16, bottom: 27, w: 27, h: 24 }); }, 32, 32, 1.5)
+      : tex(renderer, DRAW[type], 32, 32, 1.5);
+  }
 }

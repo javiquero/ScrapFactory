@@ -7,11 +7,12 @@ import { makeMachines } from './sprites/machines.js';
 import { makeTerrain } from './sprites/terrain.js';
 import { makeItems } from './sprites/items.js';
 
-export function makeTextures(renderer) {
+// `art`: imágenes PNG ya cargadas (ver sprites/art.js). Lo que falte se dibuja por código.
+export function makeTextures(renderer, art = {}) {
   const t = {};
   makeBelts(renderer, t);
-  makeMachines(renderer, t);
-  makeTerrain(renderer, t);
-  makeItems(renderer, t);
+  makeMachines(renderer, t, art);
+  makeTerrain(renderer, t, art);
+  makeItems(renderer, t, art);
   return t;
 }

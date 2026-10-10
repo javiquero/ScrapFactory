@@ -13,6 +13,7 @@ Responder y comentar en español. Los textos del juego, en español con humor co
 - Máquinas: vista cenital con algo de perspectiva (techo + cara frontal), animadas al trabajar (4 fotogramas), y NO se giran: la salida es una rampa aparte que gira. Javi quiere que parezcan máquinas de fábrica de verdad, no cajas con icono.
 - Las máquinas miden 64×88 (sobresalen por arriba) y se ordenan por profundidad con los árboles. El suelo se hornea en trozos de 16×16 casillas; no volver a pintar miles de formas por fotograma.
 - Para revisar arte: `dev/sprites.html`.
+- Arte en PNG en `assets/art/` (generado con Gemini por Javi, recortado por Claude). Cargado en `src/sprites/art.js`; si falta un PNG se usa el dibujo por código. Para pedir más arte, usar el mismo prompt de estilo y fondo liso para poder recortarlo.
 - Estilo visual propio "trastos remendados": redondeado (no pixel art), contorno marrón oscuro, pastel sobre el verde del planeta, parches atornillados. Inspirarse en packs de itch.io pero sin copiar su aspecto ni los recursos típicos de Factorio (nada de carbón/hierro/cobre).
 - Interfaz táctil: barra rápida abajo + catálogo que se despliega desde la derecha. La orientación (vertical/horizontal) no está decidida: el diseño tiene que aguantar ambas.
 - Un jugador primero. El multijugador colaborativo vendrá después (WebSockets).

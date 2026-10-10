@@ -2,6 +2,7 @@
 // Los vertederos no son un sprite por casilla: render.js pinta una mancha de tierra
 // continua y reparte encima estas piezas sueltas (junk_*), cada una a su aire.
 
+import { placeArt } from './art.js';
 import { C, T, tex, grad, vgrad, rgrad, cyl, rivet, line, rustStain, prng } from './common.js';
 
 const { INK, SHADOW } = C;
@@ -107,8 +108,13 @@ function tree(g, s, variant) {
 }
 const hgradTrunk = () => grad([[0, 0x6b4b2e], [0.4, 0xa07650], [1, 0x5a3e25]], 0, 0, 1, 0);
 
-export function makeTerrain(renderer, t) {
-  for (const [k, draw] of Object.entries(JUNK)) t['junk_' + k] = tex(renderer, draw, J, J, 2.5);
+export function makeTerrain(renderer, t, art = {}) {
+  for (const [k, draw] of Object.entries(JUNK)) {
+    const png = art['junk_' + k];
+    t['junk_' + k] = png
+      ? tex(renderer, (g, s, mid) => { sh(s, 22, 36, 16, 5); placeArt(mid, png, { cx: 22, bottom: 40, w: 40, h: 38 }); }, J, J, 2.5)
+      : tex(renderer, draw, J, J, 2.5);
+  }
 
   // Icono genérico de vertedero (para la interfaz)
   t.node_chatarra = tex(renderer, (g, s) => {
