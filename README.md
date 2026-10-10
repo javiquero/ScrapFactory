@@ -42,7 +42,9 @@ Cada push a `main` se despliega solo en Vercel.
 | `src/state.js` | Estado de la partida y las **acciones** (único punto que lo modifica). |
 | `src/sim.js` | Simulación de cintas y máquinas, paso fijo y determinista. |
 | `src/world.js` | Generación del mapa a partir de una semilla. |
-| `src/textures.js` | Gráficos dibujados con código, estilo propio "trastos remendados". |
+| `src/textures.js` | Reúne todos los gráficos. |
+| `src/sprites/` | Un archivo por grupo de gráficos: `belts.js` (cintas, curvas y uniones), `machines.js`, `terrain.js`, `items.js`, y `common.js` con la paleta. |
+| `src/beltShapes.js` | Decide qué forma lleva cada cinta (recta, curva, unión) y por dónde pasan los objetos. |
 | `src/render.js` | Pintado con PixiJS y cámara. |
 | `src/input.js` | Gestos táctiles y de ratón. |
 | `src/ui.js`, `src/messages.js` | Interfaz y comunicados de Chatarrex S.A. |

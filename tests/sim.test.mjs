@@ -4,6 +4,7 @@ import { createGame, applyAction, serialize, deserialize, currentOrder } from '.
 import { step } from '../src/sim.js';
 import { key } from '../src/world.js';
 import { TICK_RATE, beltRate, extractorRate } from '../src/defs.js';
+import { beltShape } from '../src/beltShapes.js';
 
 const run = (state, seconds) => { for (let i = 0; i < seconds * TICK_RATE; i++) step(state); };
 
@@ -181,6 +182,21 @@ for (const lvl of [1, 2, 3]) {
   assert.equal(st.levels.extractor, 2);
   assert.ok(st.unlocked.includes('divisor'));
   console.log('✓ migración de guardado v2 → v3');
+}
+
+// 11) Forma de las cintas: curva al girar y unión cuando entra otra por un lado
+{
+  const s = createGame(11);
+  const X = 5, Y = 5;
+  for (let x = X - 1; x <= X + 4; x++) for (let y = Y - 1; y <= Y + 4; y++) { delete s.world.nodes[key(x, y)]; delete s.entities[key(x, y)]; }
+  applyAction(s, { type: 'placeMany', kind: 'cinta', cells: [{ x: X, y: Y, dir: 0 }, { x: X + 1, y: Y, dir: 1 }, { x: X + 1, y: Y + 1, dir: 1 }] });
+  const shape = (x, y) => beltShape(s, s.entities[key(x, y)]);
+  assert.equal(shape(X, Y), 'straight');
+  assert.equal(shape(X + 1, Y), 'curveR', 'gira a la derecha: entra por la izquierda del sentido');
+  assert.equal(shape(X + 1, Y + 1), 'straight');
+  applyAction(s, { type: 'place', kind: 'cinta', x: X + 2, y: Y + 1, dir: 2 }); // entra por el lado
+  assert.equal(shape(X + 1, Y + 1), 'mergeL');
+  console.log('✓ formas de cinta: recta, curva y unión');
 }
 
 console.log('Todo OK');

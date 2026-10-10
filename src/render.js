@@ -3,6 +3,7 @@
 import { Container, Graphics, Sprite } from '../vendor/pixi.min.mjs';
 import { TILE, MAP_W, MAP_H, DX, DY, DT, BELT_SPACING, LEVEL_MULT, beltSpeed } from './defs.js';
 import { rng, key } from './world.js';
+import { beltShape, itemPos } from './beltShapes.js';
 
 const T = TILE;
 const HALF = T / 2;
@@ -103,7 +104,7 @@ export class Renderer {
       }
       s.position.set(e.x * T + HALF, e.y * T + HALF);
       s.rotation = e.kind === 'teletransportador' ? 0 : (e.dir * Math.PI) / 2;
-      if (e.kind === 'cinta' || e.kind === 'divisor') this.carriers.push([e, s]);
+      if (e.kind === 'cinta' || e.kind === 'divisor') this.carriers.push([e, s, e.kind === 'cinta' ? beltShape(state, e) : null]);
       else this.machines.push([e, s]);
     }
     for (const [id, s] of this.sprites) {
@@ -123,7 +124,6 @@ export class Renderer {
     this.sync();
     const lvl = this.state.levels?.cinta || 1;
     const frame = Math.floor(time * 10 * LEVEL_MULT[lvl]) % 4;
-    const beltTex = this.tx[`belt${lvl}_${frame}`];
     const ahead = beltSpeed(lvl) * DT * alpha; // cuánto avanzan entre ticks
     let used = 0;
     const put = (type, x, y) => {
@@ -134,20 +134,20 @@ export class Renderer {
       sp.visible = true;
       used++;
     };
-    for (const [e, bs] of this.carriers) {
+    for (const [e, bs, shape] of this.carriers) {
       const cx = e.x * T + HALF, cy = e.y * T + HALF;
       if (e.kind === 'cinta') {
-        bs.texture = beltTex;
+        bs.texture = this.tx[`belt${lvl}_${shape}_${frame}`];
         let lim = 1;
         for (const it of e.items) {
           const p = Math.min(lim, it.p + ahead);
           lim = p - BELT_SPACING;
-          const [x, y] = beltPos(cx, cy, it.from, e.dir, p);
+          const [x, y] = itemPos(cx, cy, HALF, it.from, e.dir, p);
           put(it.type, x, y);
         }
       } else if (e.item) {
         const p = Math.min(0.5, e.item.p);
-        const [x, y] = beltPos(cx, cy, e.item.from, e.dir, p);
+        const [x, y] = itemPos(cx, cy, HALF, e.item.from, e.dir, p);
         put(e.item.type, x, y);
       }
     }
@@ -241,13 +241,3 @@ export class Renderer {
   }
 }
 
-// Posición de un objeto en una casilla: de la entrada al centro y del centro a la salida
-function beltPos(cx, cy, from, dir, p) {
-  if (p < 0.5) {
-    const k = p * 2;
-    const sx = cx + DX[from] * HALF, sy = cy + DY[from] * HALF;
-    return [sx + (cx - sx) * k, sy + (cy - sy) * k];
-  }
-  const k = (p - 0.5) * 2;
-  return [cx + DX[dir] * HALF * k, cy + DY[dir] * HALF * k];
-}
