@@ -20,13 +20,6 @@ function firstPlanet(kind) {
   return p < 0 ? null : p;
 }
 
-// Receta en texto corto: "2 chatarra → placa prensada"
-function recipeText(kind) {
-  const r = BUILDINGS[kind].recipe;
-  if (!r) return '';
-  return `${Object.entries(r.in).map(([t, n]) => `${n} ${ITEMS[t].name.toLowerCase()}`).join(' + ')} → ${ITEMS[r.out].name.toLowerCase()}`;
-}
-
 export class UI {
   constructor({ icons, ctl, onSelectTool, onRotateTool, onInspectRotate, onInspectRemove, onReset, onLaunch, onBuy, onUpgrade, getState }) {
     this.icons = icons;
@@ -95,20 +88,20 @@ export class UI {
         if (b.category !== cat.id) continue;
         const owned = state.unlocked.includes(k);
         const img = `<img src="${this.icons[k] || ''}" alt="">`;
-        const recipe = recipeText(k);
+        const flow = this.flowHtml(k, state);
         if (owned) {
           const up = nextUpgrade(state, k);
           const side = up
             ? `<button class="buy up" data-up="${k}" data-cost="${up.cost}" ${coins < up.cost ? 'disabled' : ''}>Nivel ${up.to}<small>${money(up.cost)}</small></button>`
             : (state.levels[k] ? '<span class="max">Nivel máx.</span>' : '');
-          rows += `<div class="entry"><button class="entry-main" data-k="${k}">${img}<span><b>${b.name}</b><small>${b.desc} <i>${rateText(k, state)}</i></small></span></button>
+          rows += `<div class="entry"><button class="entry-main" data-k="${k}">${img}<span><b>${b.name}</b>${flow}<small>${b.desc} <i>${rateText(k, state)}</i></small></span></button>
             <div class="entry-side">${side}</div></div>`;
         } else if (shop.includes(k)) {
-          rows += `<div class="entry locked"><div class="entry-main">${img}<span><b>${b.name}</b><small>${recipe || b.desc}</small></span></div>
+          rows += `<div class="entry locked"><div class="entry-main">${img}<span><b>${b.name}</b>${flow}<small>${b.desc}</small></span></div>
             <div class="entry-side"><button class="buy" data-buy="${k}" data-cost="${b.price}" ${coins < b.price ? 'disabled' : ''}>Comprar<small>${money(b.price)}</small></button></div></div>`;
         } else {
           const p = firstPlanet(k);
-          rows += `<div class="entry locked soon"><div class="entry-main">${img}<span><b>${b.name}</b><small>${p == null ? 'Próximamente.' : `Se vende en el planeta ${p + 1}.`}</small></span></div></div>`;
+          rows += `<div class="entry locked soon"><div class="entry-main">${img}<span><b>${b.name}</b>${flow}<small>${p == null ? 'Próximamente.' : `Se vende en el planeta ${p + 1}.`}</small></span></div></div>`;
         }
       }
       if (rows) html += `<div class="cat">${cat.name}</div>${rows}`;
@@ -122,6 +115,21 @@ export class UI {
     }));
     list.querySelectorAll('[data-buy]').forEach((el) => el.addEventListener('click', () => this.cb.onBuy(el.dataset.buy)));
     list.querySelectorAll('[data-up]').forEach((el) => el.addEventListener('click', () => this.cb.onUpgrade(el.dataset.up)));
+  }
+
+  // Lo que entra → lo que sale, con dibujos (para encontrar de un vistazo quién hace muelles)
+  flowHtml(kind, state) {
+    const icon = (t, n = 1) => `<span class="fi" title="${ITEMS[t].name}">${n > 1 ? `<em>${n}</em>` : ''}<img src="${this.icons['item_' + t] || ''}" alt="${n} ${ITEMS[t].name}"></span>`;
+    const r = BUILDINGS[kind].recipe;
+    if (r) {
+      const ins = Object.entries(r.in).map(([t, n]) => icon(t, n)).join('<i class="fop">+</i>');
+      return `<span class="flow">${ins}<i class="fop">→</i>${icon(r.out)}</span>`;
+    }
+    if (kind === 'extractor') {
+      const res = PLANETS[Math.min(state.planet, PLANETS.length - 1)].resources;
+      return `<span class="flow"><i class="fop">⛏</i>${res.map((t) => icon(t)).join('<i class="fop">/</i>')}</span>`;
+    }
+    return '';
   }
 
   // Con el catálogo abierto, los botones se encienden en cuanto llega el dinero

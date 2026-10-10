@@ -317,10 +317,16 @@ button:focus-visible { outline: 3px solid var(--sun); outline-offset: 2px; }
 .entry b { display: block; font-weight: 600; font-size: 16px; }
 .entry small { display: block; font-size: 13px; color: var(--ink-soft); line-height: 1.3; }
 .entry small i { display: block; font-style: normal; font-weight: 500; color: var(--forest-2); margin-top: 2px; }
+.flow { display: flex; align-items: center; flex-wrap: wrap; gap: 2px; margin: 3px 0 2px; }
+.flow .fi { position: relative; display: inline-flex; width: 30px; height: 30px; background: var(--lichen); border-radius: 8px; align-items: center; justify-content: center; }
+.flow .fi img { width: 28px; height: 28px; }
+.flow .fi em { position: absolute; left: -3px; top: -4px; font-style: normal; font-size: 11px; font-weight: 700; background: var(--forest); color: var(--lichen); border-radius: 99px; min-width: 16px; height: 16px; line-height: 16px; text-align: center; padding: 0 3px; }
+.flow .fop { font-style: normal; font-weight: 700; color: var(--ink-soft); font-size: 14px; padding: 0 2px; }
 .entry-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; text-align: left; padding: 0; background: none; }
 .entry-side { display: flex; flex-direction: column; align-items: stretch; gap: 4px; flex: none; }
-.entry.locked .entry-main { opacity: 0.6; }
+.entry.locked .entry-main > img, .entry.locked b, .entry.locked small { opacity: 0.6; }
 .entry.locked img { filter: grayscale(0.85); }
+.entry.locked .flow img { filter: none; }
 .entry.soon { opacity: 0.5; }
 .buy {
   background: var(--sun);
