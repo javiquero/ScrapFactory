@@ -169,6 +169,7 @@ async function boot() {
     ui.memo(msg.orderIntro(currentOrder(state)));
     ui.memo(msg.TIPS[0]);
   }
+  let lastWrong = -1e9;
   function flushEvents() {
     if (!state.events.length) return;
     for (const ev of state.events) {
@@ -195,6 +196,9 @@ async function boot() {
         ui.renderBar(state);
       } else if (ev.type === 'upgraded') {
         ui.memo(msg.upgradedMessage(ev.kind, ev.level));
+      } else if (ev.type === 'wrongItem' && performance.now() - lastWrong > 30000) {
+        lastWrong = performance.now();
+        ui.memo(msg.wrongItemMessage(ev.item));
       } else if (ev.type === 'firstBelt') {
         ui.memo(msg.FIRST_BELT);
       }

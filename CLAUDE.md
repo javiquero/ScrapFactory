@@ -21,7 +21,7 @@ Responder y comentar en español. Los textos del juego, en español con humor co
 - Ritmos cuadrados (ver tabla del README y `docs/planetas.md`): al mismo nivel, 2 extractores llenan 1 cinta, 1 cinta llena alimenta 1 prensa y 1 prensa alimenta 1 ensambladora; lo mismo para la cadena larga. Las mejoras son por tipo de edificio y globales (×1 / ×1,5 / ×2). Si se cambia un número, mantener esa proporción y pasar `tests/sim.test.mjs`, que la comprueba.
 - Progresión (`docs/planetas.md`): el planeta 1 tiene toda la cadena larga de la chatarra (hasta robots). Cada planeta nuevo = un recurso nuevo, mapa vacío. Hasta 10 recursos.
 - Entrega: UNA nave fija de 2×2 (`state.ship`, no es una entidad), aparece sola, no se construye ni se quita, recibe por los 4 lados con 2 entradas por lado. Ya no existe el teletransportador.
-- Dinero: Chatarrex paga cada cosa enviada (`value`) y cada pedido (`pay`). Las máquinas y las mejoras se compran en el catálogo (acciones `buy` y `upgrade`). Dinero, compras y mejoras viajan entre planetas. La prueba de economía comprueba que nunca hay atasco.
+- Dinero: Chatarrex SOLO paga lo del pedido actual: cada pieza que cuenta (`value`) y el pedido completo (`pay`). Lo que no se pidió entra en la nave pero no se paga. Las máquinas y las mejoras se compran en el catálogo (acciones `buy` y `upgrade`). Dinero, compras y mejoras viajan entre planetas. La prueba de economía comprueba que nunca hay atasco.
 
 ## Regla de arquitectura
 

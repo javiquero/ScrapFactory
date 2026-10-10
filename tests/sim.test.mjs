@@ -40,7 +40,7 @@ function line(state, x, y, n) {
   const need = PLANETS[0].orders[0];
   assert.ok((s.delivered.chatarra || 0) >= need.amount, 'debería entregar >= ' + need.amount + ' chatarra, entregó ' + s.delivered.chatarra);
   assert.equal(s.orderIndex, 1, 'primer pedido completado');
-  assert.equal(s.money, s.delivered.chatarra * ITEMS.chatarra.value + need.pay, 'cobra por pieza y por pedido');
+  assert.equal(s.money, need.amount * ITEMS.chatarra.value + need.pay, 'cobra las piezas del pedido y el pedido; la chatarra de más no');
   assert.ok(!s.unlocked.includes('prensa'), 'la prensa ya no se regala: se compra');
   console.log('✓ línea básica: entregadas', s.delivered.chatarra, 'chatarra');
 }
@@ -344,6 +344,24 @@ for (const lvl of [1, 2, 3]) {
   run(s, 0.5);
   assert.equal(s.delivered.chatarra, 8, 'entran por las 8 bocas');
   console.log('✓ nave fija de 2×2 con 8 entradas');
+}
+
+// 16b) Solo se paga lo que pide el pedido
+{
+  const s = createGame(78);
+  const { x, y } = s.ship;
+  delete s.world.nodes[key(x - 1, y)];
+  applyAction(s, { type: 'place', kind: 'cinta', x: x - 1, y, dir: 0 });
+  assert.equal(currentOrder(s).item, 'chatarra');
+  s.entities[key(x - 1, y)].items.push({ type: 'placa', p: 0.95, from: 2 });
+  run(s, 0.3);
+  assert.equal(s.delivered.placa, 1, 'la nave lo acepta');
+  assert.equal(s.money, 0, 'pero no lo paga');
+  assert.equal(s.orderProgress, 0, 'ni cuenta para el pedido');
+  s.entities[key(x - 1, y)].items.push({ type: 'chatarra', p: 0.95, from: 2 });
+  run(s, 0.3);
+  assert.equal(s.money, ITEMS.chatarra.value, 'lo del pedido sí se paga');
+  console.log('✓ solo se paga lo del pedido');
 }
 
 // 17) Cadena larga del planeta 1: chatarra → alambre/placa → muelle/tornillos/engranaje → mecanismo → motor; + carcasa → robot

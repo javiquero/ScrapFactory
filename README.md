@@ -1,6 +1,6 @@
 # Scrap Factory
 
-Juego web de construir fábricas, tranquilo y sin combate. Eres un colono solo en el planeta SC-7 y Chatarrex S.A., una megacorporación bastante cutre, te va mandando pedidos: de chatarra a placas, alambre, engranajes, motores y robots de limpieza. Montas extractores, cintas y máquinas, y lo llevas todo hasta tu nave. Chatarrex te paga por cada envío y por cada pedido, y con ese dinero compras máquinas nuevas y mejoras. Al terminar un planeta, despegas a otro con un recurso nuevo (ver `docs/planetas.md`).
+Juego web de construir fábricas, tranquilo y sin combate. Eres un colono solo en el planeta SC-7 y Chatarrex S.A., una megacorporación bastante cutre, te va mandando pedidos: de chatarra a placas, alambre, engranajes, motores y robots de limpieza. Montas extractores, cintas y máquinas, y lo llevas todo hasta tu nave. Chatarrex te paga lo que pide en cada pedido (cada pieza y un extra al completarlo), y con ese dinero compras máquinas nuevas y mejoras. Al terminar un planeta, despegas a otro con un recurso nuevo (ver `docs/planetas.md`).
 
 Inspirado en Builderment, pero en el navegador: funciona igual en el móvil que en el ordenador.
 

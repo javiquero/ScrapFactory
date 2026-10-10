@@ -10,13 +10,13 @@ export const CORP = 'Chatarrex S.A.';
 export const money = (v) => `${Math.floor(v).toLocaleString('es-ES')} ₡`;
 
 export const WELCOME = [
-  'Bienvenido al planeta SC-7, colono. Tu misión: enviarnos chatarra. Tu sueldo: un crédito por pieza, que es más de lo que vale.',
+  'Bienvenido al planeta SC-7, colono. Tu misión: enviarnos chatarra. Te pagamos cada pieza que pidamos, y un extra al completar el pedido. Lo que no pidamos, no se paga.',
 ];
 
 export const TIPS = [
   'Pon un extractor encima de un vertedero de chatarra y lleva lo que saque con cintas hasta tu nave. Entra por cualquier lado.',
   'Arrastra el dedo con la cinta elegida para trazar el recorrido de una vez. Con dos dedos mueves el mapa.',
-  'Todo lo que llega a la nave se paga, aunque no sea del pedido. Pero el pedido paga mucho más.',
+  'Solo pagamos lo que pide el pedido. Lo demás nos lo quedamos igual, por si acaso. Gratis.',
   'Con los créditos compras máquinas nuevas y mejoras en el catálogo (botón Más).',
   'Recordatorio: el casco de la empresa es solo decorativo. No lo uses si cae algo.',
   'El aire local tiene un 3 % de radiactividad. Dentro de lo aceptable para el personal de campo.',
@@ -84,6 +84,14 @@ export function planetIntro(state) {
     `Bienvenido a ${p.name}, "${p.nick}". Empiezas de cero, pero conservas lo que compraste y tus mejoras.`,
     `Novedad del planeta: ${ITEMS[nuevo].name.toLowerCase()}. Lo encontrarás en el suelo junto a la chatarra de siempre. Hay máquinas nuevas a la venta.`,
   ];
+}
+
+export function wrongItemMessage(item) {
+  return pick([
+    `¿${ITEMS[item].name}? Eso no estaba en el pedido. Nos lo quedamos, pero no se paga.`,
+    `Hemos recibido ${ITEMS[item].plural} que nadie pidió. Lo archivamos "por si acaso". Sin cobrar, claro.`,
+    `Recordatorio: solo pagamos lo del pedido. Lo otro lo usamos de pisapapeles.`,
+  ]);
 }
 
 export const FIRST_BELT = 'Primera cinta instalada. Nuestros abogados confirman que mover cosas sigue siendo legal.';

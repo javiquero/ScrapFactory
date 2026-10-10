@@ -7,12 +7,12 @@ Montar una cadena y esperar aburre. El reto está en **volver a resolver la log�
 - **Planeta 1 (SC-7, "El Vertedero")**: solo hay chatarra, pero tiene **toda la cadena larga**: 10 máquinas y 25 pedidos, hasta llegar a robots de limpieza.
 - **Cada planeta nuevo = un recurso nuevo** que se mezcla con lo de antes. Mapa nuevo y vacío: la fábrica se queda atrás.
 - **La nave** es el único sitio donde se entrega. Una sola, fija, de 2×2 casillas, aparece sola al llegar y no se puede mover ni quitar. Recibe por los cuatro lados, dos entradas por lado (8 bocas). Así no vale poner un punto de entrega al lado de cada montón: hay que traer las cintas hasta ella.
-- **Dinero (créditos ₡)**: Chatarrex paga por cada cosa que llega a la nave (su `value`) y bastante más por cada pedido completado (`pay`). Con el dinero se **compran máquinas** y **mejoras de nivel** en el catálogo.
+- **Dinero (créditos ₡)**: Chatarrex solo paga lo que pide el pedido actual: cada pieza que cuenta para el pedido (su `value`) y un extra al completarlo (`pay`). Lo demás la nave lo acepta pero no lo paga. Con el dinero se **compran máquinas** y **mejoras de nivel** en el catálogo.
 
 ## Economía
 
 - Se empieza con 0 ₡, la cinta y el extractor.
-- Todo lo enviado se paga, sea o no del pedido. El pedido paga mucho más que las piezas sueltas.
+- Solo se paga lo del pedido. Así no vale llenar la nave de chatarra para hacerse rico.
 - Comprar (`{type:'buy', kind}`) y mejorar (`{type:'upgrade', kind}`) son acciones serializables, como todo.
 - Las mejoras suben de nivel **todos** los edificios de un tipo (×1 / ×1,5 / ×2). Precio: cinta 300 / 900, extractor 250 / 750, máquinas 2× y 6× su precio (mínimo 200).
 - Al despegar se conservan el dinero, lo comprado y las mejoras. Se pierde la fábrica.

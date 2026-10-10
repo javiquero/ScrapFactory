@@ -45,12 +45,13 @@ export function tryInsert(state, x, y, type, dir) {
   }
 }
 
-// Llega algo a la nave: Chatarrex lo paga siempre, y si es lo del pedido, cuenta.
+// Llega algo a la nave. Solo se paga (y cuenta) lo que pide el pedido actual;
+// lo demás Chatarrex se lo queda "por si acaso" y no paga nada.
 function deliver(state, type) {
   state.delivered[type] = (state.delivered[type] || 0) + 1;
-  state.money = (state.money || 0) + (ITEMS[type]?.value || 0);
   const order = orderAt(state.planet || 0, state.orderIndex);
   if (type === order.item) {
+    state.money = (state.money || 0) + (ITEMS[type]?.value || 0);
     state.orderProgress++;
     if (state.orderProgress >= order.amount) {
       state.money += order.pay;
@@ -64,6 +65,8 @@ function deliver(state, type) {
       state.orderProgress = 0;
       state.rev++;
     }
+  } else {
+    state.events.push({ type: 'wrongItem', item: type });
   }
   state.events.push({ type: 'delivered', item: type });
 }
