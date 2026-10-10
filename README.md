@@ -13,6 +13,16 @@ Inspirado en Builderment, pero en el navegador: funciona igual en el móvil que 
 - **Dos dedos**: mover y hacer zoom con cualquier herramienta. En ordenador, rueda del ratón para el zoom y `R` para girar.
 - **Más**: catálogo completo. Lo que eliges ahí pasa a la barra de abajo.
 
+## Ritmos
+
+Al mismo nivel, dos extractores llenan una cinta y una cinta llena alimenta justo una prensa; una prensa saca justo las placas que necesita una ensambladora. Los pedidos dan mejoras de nivel (×1,5 y ×2) que se aplican a todos los edificios de ese tipo.
+
+| Nivel | Cinta | Extractor | Prensa (entra → sale) | Ensambladora (entra → sale) |
+| --- | --- | --- | --- | --- |
+| 1 | 5 obj/s | 2,5 chatarra/s | 5 chatarra → 2,5 placas/s | 2,5 placas + 1,25 chatarra → 1,25 engranajes/s |
+| 2 | 7,5 obj/s | 3,75 chatarra/s | 7,5 → 3,75 | 3,75 + 1,875 → 1,875 |
+| 3 | 10 obj/s | 5 chatarra/s | 10 → 5 | 5 + 2,5 → 2,5 |
+
 La partida se guarda sola en el navegador.
 
 ## Desarrollo

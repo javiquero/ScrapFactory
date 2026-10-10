@@ -148,7 +148,7 @@ async function boot() {
     if (!state.events.length) return;
     for (const ev of state.events) {
       if (ev.type === 'orderDone') {
-        ui.memo(msg.orderDoneMessage(ev.unlocks));
+        ui.memo(msg.orderDoneMessage(ev.unlocks, ev.upgrades));
         ui.memo(msg.orderIntro(currentOrder(state)));
         ui.renderOrder(state, true);
         ui.renderBar(state);

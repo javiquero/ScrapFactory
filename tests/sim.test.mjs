@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createGame, applyAction, serialize, deserialize, currentOrder } from '../src/state.js';
 import { step } from '../src/sim.js';
 import { key } from '../src/world.js';
-import { TICK_RATE } from '../src/defs.js';
+import { TICK_RATE, beltRate, extractorRate } from '../src/defs.js';
 
 const run = (state, seconds) => { for (let i = 0; i < seconds * TICK_RATE; i++) step(state); };
 
@@ -73,7 +73,7 @@ function line(state, x, y, n) {
   applyAction(s, { type: 'remove', cells: [{ x: x + 1, y }] });
   applyAction(s, { type: 'place', kind: 'cinta', x: x + 1, y, dir: 2 }); // apunta hacia el extractor
   run(s, 5);
-  assert.equal(s.entities[key(x + 1, y)].item, null);
+  assert.equal(s.entities[key(x + 1, y)].items.length, 0);
   console.log('✓ cinta contraria bloquea');
 }
 
@@ -121,6 +121,66 @@ function line(state, x, y, n) {
   run(s, 8);
   assert.equal(s.delivered.engranaje, 2, 'engranajes: ' + s.delivered.engranaje);
   console.log('✓ ensambladora: entregados', s.delivered.engranaje, 'engranajes');
+}
+
+// 8) Ritmos cuadrados: 1 extractor = media cinta, 2 extractores = cinta llena
+function throughput(nExtractors, level) {
+  const s = createGame(7);
+  s.levels = { cinta: level, extractor: level, prensa: level, ensambladora: level };
+  const x0 = s.world.spawn.x - 10, y0 = s.world.spawn.y + 8;
+  for (let x = x0 - 1; x <= x0 + 12; x++) for (let y = y0 - 1; y <= y0; y++) {
+    delete s.world.nodes[key(x, y)]; delete s.entities[key(x, y)];
+  }
+  for (let i = 0; i < nExtractors; i++) {
+    s.world.nodes[key(x0 + i, y0 - 1)] = 'chatarra';
+    assert.ok(applyAction(s, { type: 'place', kind: 'extractor', x: x0 + i, y: y0 - 1, dir: 1 }).ok);
+  }
+  const cells = [];
+  for (let i = 0; i < 10; i++) cells.push({ x: x0 + i, y: y0, dir: 0 });
+  applyAction(s, { type: 'placeMany', kind: 'cinta', cells });
+  assert.ok(applyAction(s, { type: 'place', kind: 'teletransportador', x: x0 + 10, y: y0, dir: 0 }).ok);
+  run(s, 20);
+  const before = s.delivered.chatarra || 0;
+  run(s, 40);
+  return ((s.delivered.chatarra || 0) - before) / 40;
+}
+for (const lvl of [1, 2, 3]) {
+  const one = throughput(1, lvl), two = throughput(2, lvl), three = throughput(3, lvl);
+  const er = extractorRate(lvl), br = beltRate(lvl);
+  assert.ok(Math.abs(one - er) < 0.1, `nivel ${lvl}: 1 extractor da ${one}/s, esperado ${er}`);
+  assert.ok(Math.abs(two - br) < 0.15, `nivel ${lvl}: 2 extractores dan ${two}/s, esperado ${br}`);
+  assert.ok(three <= br + 0.1, `nivel ${lvl}: la cinta no puede pasar de ${br}/s (da ${three})`);
+  console.log(`✓ nivel ${lvl}: 1 extractor ${one.toFixed(2)}/s · 2 extractores ${two.toFixed(2)}/s · tope cinta ${br}/s`);
+}
+
+// 9) Una cinta llena alimenta justo una prensa (nivel 1: 5 chatarra/s -> 2,5 placas/s)
+{
+  const s = createGame(7);
+  s.unlocked.push('prensa');
+  const x0 = s.world.spawn.x - 10, y0 = s.world.spawn.y + 8;
+  for (let x = x0 - 1; x <= x0 + 12; x++) for (let y = y0 - 1; y <= y0; y++) { delete s.world.nodes[key(x, y)]; delete s.entities[key(x, y)]; }
+  for (let i = 0; i < 2; i++) { s.world.nodes[key(x0 + i, y0 - 1)] = 'chatarra'; applyAction(s, { type: 'place', kind: 'extractor', x: x0 + i, y: y0 - 1, dir: 1 }); }
+  const cells = []; for (let i = 0; i < 6; i++) cells.push({ x: x0 + i, y: y0, dir: 0 });
+  applyAction(s, { type: 'placeMany', kind: 'cinta', cells });
+  applyAction(s, { type: 'place', kind: 'prensa', x: x0 + 6, y: y0, dir: 0 });
+  applyAction(s, { type: 'placeMany', kind: 'cinta', cells: [{ x: x0 + 7, y: y0, dir: 0 }, { x: x0 + 8, y: y0, dir: 0 }] });
+  applyAction(s, { type: 'place', kind: 'teletransportador', x: x0 + 9, y: y0, dir: 0 });
+  run(s, 20); const b = s.delivered.placa || 0; run(s, 40);
+  const rate = ((s.delivered.placa || 0) - b) / 40;
+  assert.ok(Math.abs(rate - 2.5) < 0.15, 'prensa da ' + rate);
+  console.log('✓ prensa con cinta llena:', rate.toFixed(2), 'placas/s');
+}
+
+// 10) Una partida guardada en la versión anterior se pone al día
+{
+  const old = { version: 2, seed: 3, tick: 10, nextId: 3, unlocked: ['cinta', 'extractor', 'teletransportador', 'prensa'], orderIndex: 2, orderProgress: 5, delivered: {}, rev: 4,
+    entities: { '1,1': { id: 2, kind: 'cinta', x: 1, y: 1, dir: 0, item: { type: 'chatarra', p: 0.3, from: 2 } } } };
+  const st = deserialize(JSON.stringify(old));
+  assert.equal(st.version, 3);
+  assert.equal(st.entities['1,1'].items.length, 1);
+  assert.equal(st.levels.extractor, 2);
+  assert.ok(st.unlocked.includes('divisor'));
+  console.log('✓ migración de guardado v2 → v3');
 }
 
 console.log('Todo OK');

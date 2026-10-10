@@ -1,7 +1,7 @@
 // Pintado con PixiJS. Solo LEE el estado; nunca lo modifica.
 
 import { Container, Graphics, Sprite } from '../vendor/pixi.min.mjs';
-import { TILE, MAP_W, MAP_H, DX, DY, DT, BELT_SPEED } from './defs.js';
+import { TILE, MAP_W, MAP_H, DX, DY, DT, BELT_SPACING, LEVEL_MULT, beltSpeed } from './defs.js';
 import { rng, key } from './world.js';
 
 const T = TILE;
@@ -107,37 +107,42 @@ export class Renderer {
   }
 
   textureFor(e) {
-    if (e.kind === 'cinta') return this.tx.belt0;
+    if (e.kind === 'cinta') return this.tx[`belt${this.state.levels?.cinta || 1}_0`];
     return this.tx[e.kind];
   }
 
   // Se llama cada fotograma. alpha = fracción del tick actual (para suavizar).
   update(time, alpha) {
     this.sync();
-    const frame = Math.floor(time * 8 * (BELT_SPEED / 2)) % 4;
-    const beltTex = this.tx['belt' + frame];
+    const lvl = this.state.levels?.cinta || 1;
+    const frame = Math.floor(time * 10 * LEVEL_MULT[lvl]) % 4;
+    const beltTex = this.tx[`belt${lvl}_${frame}`];
+    const ahead = beltSpeed(lvl) * DT * alpha; // cuánto avanzan entre ticks
     let used = 0;
-    for (const [e, bs] of this.carriers) {
-      if (e.kind === 'cinta') bs.texture = beltTex;
-      if (!e.item) continue;
-      const it = e.item;
-      const p = Math.min(1, it.p + (it.p < 1 ? BELT_SPEED * DT * alpha : 0));
-      const cx = e.x * T + HALF, cy = e.y * T + HALF;
-      let x, y;
-      if (p < 0.5) {
-        const k = p * 2;
-        const sx = cx + DX[it.from] * HALF, sy = cy + DY[it.from] * HALF;
-        x = sx + (cx - sx) * k; y = sy + (cy - sy) * k;
-      } else if (e.kind === 'cinta') {
-        const k = (p - 0.5) * 2;
-        x = cx + DX[e.dir] * HALF * k; y = cy + DY[e.dir] * HALF * k;
-      } else { x = cx; y = cy; }
-      let s = this.itemPool[used];
-      if (!s) { s = new Sprite(); s.anchor.set(0.5); this.itemLayer.addChild(s); this.itemPool.push(s); }
-      s.texture = this.tx['item_' + it.type];
-      s.position.set(x, y);
-      s.visible = true;
+    const put = (type, x, y) => {
+      let sp = this.itemPool[used];
+      if (!sp) { sp = new Sprite(); sp.anchor.set(0.5); this.itemLayer.addChild(sp); this.itemPool.push(sp); }
+      sp.texture = this.tx['item_' + type];
+      sp.position.set(x, y);
+      sp.visible = true;
       used++;
+    };
+    for (const [e, bs] of this.carriers) {
+      const cx = e.x * T + HALF, cy = e.y * T + HALF;
+      if (e.kind === 'cinta') {
+        bs.texture = beltTex;
+        let lim = 1;
+        for (const it of e.items) {
+          const p = Math.min(lim, it.p + ahead);
+          lim = p - BELT_SPACING;
+          const [x, y] = beltPos(cx, cy, it.from, e.dir, p);
+          put(it.type, x, y);
+        }
+      } else if (e.item) {
+        const p = Math.min(0.5, e.item.p);
+        const [x, y] = beltPos(cx, cy, e.item.from, e.dir, p);
+        put(e.item.type, x, y);
+      }
     }
     for (let i = used; i < this.itemPool.length; i++) this.itemPool[i].visible = false;
 
@@ -227,4 +232,15 @@ export class Renderer {
     const t = this.screenToTile(width / 2, height / 2);
     return { ...t, zoom: this.zoom };
   }
+}
+
+// Posición de un objeto en una casilla: de la entrada al centro y del centro a la salida
+function beltPos(cx, cy, from, dir, p) {
+  if (p < 0.5) {
+    const k = p * 2;
+    const sx = cx + DX[from] * HALF, sy = cy + DY[from] * HALF;
+    return [sx + (cx - sx) * k, sy + (cy - sy) * k];
+  }
+  const k = (p - 0.5) * 2;
+  return [cx + DX[dir] * HALF * k, cy + DY[dir] * HALF * k];
 }

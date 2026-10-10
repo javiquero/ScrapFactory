@@ -1,8 +1,13 @@
 // Simulación de la fábrica: un paso fijo de DT segundos.
 // No toca nada de pantalla; solo lee y escribe el estado. Determinista.
 
-import { BUILDINGS, BELT_SPEED, DT, DX, DY, ITEMS, MACHINE_BUFFER, OUTPUT_BUFFER, opposite, orderAt } from './defs.js';
+import {
+  BUILDINGS, BELT_SPACING, DT, DX, DY, ITEMS, MACHINE_BUFFER, OUTPUT_BUFFER, MAX_LEVEL,
+  opposite, orderAt, beltSpeed, extractorRate, craftTime,
+} from './defs.js';
 import { key } from './world.js';
+
+const EPS = 1e-6;
 
 // Intenta meter un objeto en la casilla (x, y), viajando en dirección `dir`.
 export function tryInsert(state, x, y, type, dir) {
@@ -10,10 +15,13 @@ export function tryInsert(state, x, y, type, dir) {
   if (!e) return false;
   const fromSide = opposite(dir); // lado por el que entra
   switch (e.kind) {
-    case 'cinta':
-      if (e.item || e.dir === fromSide) return false;
-      e.item = { type, p: 0, from: fromSide };
+    case 'cinta': {
+      if (e.dir === fromSide) return false;
+      const last = e.items[e.items.length - 1];
+      if (last && last.p < BELT_SPACING - EPS) return false; // no cabe: hueco mínimo
+      e.items.push({ type, p: 0, from: fromSide });
       return true;
+    }
     case 'divisor':
       if (e.item || dir !== e.dir) return false;
       e.item = { type, p: 0, from: fromSide };
@@ -42,7 +50,12 @@ function deliver(state, type) {
     state.orderProgress++;
     if (state.orderProgress >= order.amount) {
       for (const u of order.unlocks) if (!state.unlocked.includes(u)) state.unlocked.push(u);
-      state.events.push({ type: 'orderDone', index: state.orderIndex, unlocks: order.unlocks });
+      const upgrades = {};
+      for (const [k, v] of Object.entries(order.upgrades || {})) {
+        const nv = Math.min(MAX_LEVEL, Math.max(state.levels[k] || 1, v));
+        if (nv !== state.levels[k]) { state.levels[k] = nv; upgrades[k] = nv; }
+      }
+      state.events.push({ type: 'orderDone', index: state.orderIndex, unlocks: order.unlocks, upgrades });
       state.orderIndex++;
       state.orderProgress = 0;
       state.rev++;
@@ -70,8 +83,9 @@ export function step(state) {
         if (!nodeType) break;
         if (e.out.length < OUTPUT_BUFFER) {
           e.timer += DT;
-          if (e.timer >= BUILDINGS.extractor.time) {
-            e.timer = 0;
+          const every = 1 / extractorRate(state.levels.extractor);
+          if (e.timer >= every - EPS) {
+            e.timer -= every;
             e.out.push(nodeType);
           }
         }
@@ -88,7 +102,7 @@ export function step(state) {
         }
         if (e.busy) {
           e.timer += DT;
-          if (e.timer >= r.time) {
+          if (e.timer >= craftTime(e.kind, state.levels[e.kind]) - EPS) {
             e.busy = false;
             e.out.push(r.out);
           }
@@ -97,14 +111,21 @@ export function step(state) {
         break;
       }
       case 'cinta': {
-        if (!e.item) break;
-        e.item.p = Math.min(1, e.item.p + BELT_SPEED * DT);
-        if (e.item.p >= 1 && tryInsert(state, e.x + DX[e.dir], e.y + DY[e.dir], e.item.type, e.dir)) e.item = null;
+        const items = e.items;
+        if (!items.length) break;
+        // 1) el de delante intenta pasar a la siguiente casilla
+        if (items[0].p >= 1 - EPS && tryInsert(state, e.x + DX[e.dir], e.y + DY[e.dir], items[0].type, e.dir)) items.shift();
+        // 2) todos avanzan, respetando el hueco con el de delante
+        const spd = beltSpeed(state.levels.cinta) * DT;
+        for (let i = 0; i < items.length; i++) {
+          const lim = i === 0 ? 1 : items[i - 1].p - BELT_SPACING;
+          if (items[i].p < lim) items[i].p = Math.min(lim, items[i].p + spd);
+        }
         break;
       }
       case 'divisor': {
         if (!e.item) break;
-        e.item.p = Math.min(1, e.item.p + BELT_SPEED * 1.5 * DT);
+        e.item.p = Math.min(1, e.item.p + beltSpeed(state.levels.cinta) * 2 * DT);
         if (e.item.p < 1) break;
         // Izquierda, frente, derecha, empezando por donde tocó la última vez
         const outs = [(e.dir + 3) % 4, e.dir, (e.dir + 1) % 4];

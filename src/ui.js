@@ -1,6 +1,6 @@
 // Interfaz en HTML por encima del lienzo: pedido, barra rápida, catálogo, comunicados.
 
-import { BUILDINGS, CATEGORIES, ITEMS, ORDERS, MACHINE_BUFFER } from './defs.js';
+import { BUILDINGS, CATEGORIES, ITEMS, ORDERS, MACHINE_BUFFER, beltRate, extractorRate, craftTime } from './defs.js';
 import { currentOrder } from './state.js';
 
 const $ = (id) => document.getElementById(id);
@@ -69,7 +69,7 @@ export class UI {
         const b = BUILDINGS[k];
         if (b.category !== cat.id) continue;
         const ok = state.unlocked.includes(k);
-        const lock = ok ? b.desc : `Se desbloquea al completar el pedido ${unlockOrderOf(k)}.`;
+        const lock = ok ? `${b.desc} <i>${rateText(k, state)}</i>` : `Se desbloquea al completar el pedido ${unlockOrderOf(k)}.`;
         html += `<button class="entry ${ok ? '' : 'locked'}" data-k="${k}" ${ok ? '' : 'aria-disabled="true"'}>
           <img src="${this.icons[k] || ''}" alt=""><span><b>${b.name}</b><small>${lock}</small></span></button>`;
       }
@@ -160,21 +160,41 @@ export class UI {
   get inspectOpen() { return !$('inspect').hidden; }
 }
 
+// Números con coma y sin decimales sobrantes: 2,5 · 5 · 7,5
+export const num = (v) => (Math.round(v * 100) / 100).toLocaleString('es-ES');
+
+// Ritmo de un tipo de edificio a su nivel actual
+export function rateText(kind, state) {
+  const lv = state.levels || {};
+  switch (kind) {
+    case 'cinta': return `Nivel ${lv.cinta} · hasta ${num(beltRate(lv.cinta))} objetos/s`;
+    case 'divisor': return `Tan rápido como las cintas (${num(beltRate(lv.cinta))}/s)`;
+    case 'extractor': return `Nivel ${lv.extractor} · ${num(extractorRate(lv.extractor))} chatarra/s`;
+    case 'prensa':
+    case 'ensambladora': {
+      const r = BUILDINGS[kind].recipe;
+      const per = 1 / craftTime(kind, lv[kind]);
+      const ins = Object.entries(r.in).map(([t, n]) => `${num(n * per)} ${ITEMS[t].name.toLowerCase()}`).join(' + ');
+      return `Nivel ${lv[kind]} · ${ins} → ${num(per)} ${ITEMS[r.out].name.toLowerCase()} por segundo`;
+    }
+    default: return '';
+  }
+}
+
 function describe(e, state) {
   const n = (t) => ITEMS[t].name.toLowerCase();
   switch (e.kind) {
     case 'cinta':
+      return `${rateText('cinta', state)} · lleva ${e.items.length}`;
     case 'divisor':
-      return e.item ? `Lleva: ${n(e.item.type)}` : 'Vacía';
-    case 'extractor': {
-      const node = state.world.nodes[`${e.x},${e.y}`];
-      return `Saca ${n(node)}${e.out.length >= 4 ? ' · salida atascada' : ''}`;
-    }
+      return e.item ? `Lleva: ${n(e.item.type)}` : 'Vacío';
+    case 'extractor':
+      return `${rateText('extractor', state)}${e.out.length >= 4 ? ' · salida atascada' : ''}`;
     case 'prensa':
     case 'ensambladora': {
       const r = BUILDINGS[e.kind].recipe;
       const parts = Object.keys(r.in).map((t) => `${e.inv[t] || 0}/${MACHINE_BUFFER} ${n(t)}`);
-      return `${parts.join(', ')} · ${e.busy ? 'trabajando' : 'esperando'}`;
+      return `${rateText(e.kind, state)}. Dentro: ${parts.join(', ')} · ${e.busy ? 'trabajando' : 'esperando'}`;
     }
     case 'teletransportador': {
       const total = Object.values(state.delivered).reduce((a, b) => a + b, 0);

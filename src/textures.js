@@ -30,19 +30,23 @@ function box(g, color, dark) {
 export function makeTextures(renderer) {
   const t = {};
 
-  // --- Cintas (4 fotogramas para la animación de las flechitas) ---
-  for (let f = 0; f < 4; f++) {
-    t['belt' + f] = tex(renderer, (g) => {
-      g.rect(0, 10, T, T - 20).fill(0x3f4a3c);
-      g.rect(0, 10, T, 4).fill(0x2c352a);
-      g.rect(0, T - 14, T, 4).fill(0x2c352a);
-      const off = (f / 4) * 16;
-      for (let x = -16; x < T + 16; x += 16) {
-        const cx = x + off;
-        g.poly([cx, 22, cx + 7, T / 2, cx, T - 22, cx + 3, T - 22, cx + 10, T / 2, cx + 3, 22]).fill({ color: 0xa9c79a, alpha: 0.55 });
-      }
-    });
+  // --- Cintas: 3 niveles × 4 fotogramas para la animación de las flechitas ---
+  const chevron = [0, 0xa9c79a, 0xffc857, 0x7fe3e0];
+  for (let lvl = 1; lvl <= 3; lvl++) {
+    for (let f = 0; f < 4; f++) {
+      t[`belt${lvl}_${f}`] = tex(renderer, (g) => {
+        g.rect(0, 10, T, T - 20).fill(0x3f4a3c);
+        g.rect(0, 10, T, 4).fill(lvl === 1 ? 0x2c352a : chevron[lvl]);
+        g.rect(0, T - 14, T, 4).fill(lvl === 1 ? 0x2c352a : chevron[lvl]);
+        const off = (f / 4) * 16;
+        for (let x = -16; x < T + 16; x += 16) {
+          const cx = x + off;
+          g.poly([cx, 22, cx + 7, T / 2, cx, T - 22, cx + 3, T - 22, cx + 10, T / 2, cx + 3, 22]).fill({ color: chevron[lvl], alpha: 0.6 });
+        }
+      });
+    }
   }
+  for (let f = 0; f < 4; f++) t['belt' + f] = t[`belt1_${f}`]; // nombres antiguos
 
   t.divisor = tex(renderer, (g) => {
     g.roundRect(4, 4, T - 8, T - 8, 10).fill(0x3f4a3c);

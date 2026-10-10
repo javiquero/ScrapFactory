@@ -17,17 +17,23 @@ export const TIPS = [
   'El aire local tiene un 3 % de radiactividad. Dentro de lo aceptable para el personal de campo.',
   'El departamento de Recursos Humanos te recuerda que no hay departamento de Recursos Humanos.',
   'Toca un edificio para girarlo. Mantenlo pulsado para ver qué tiene dentro o quitarlo.',
+  'Consejo de eficiencia: dos extractores llenan una cinta, y una cinta llena alimenta justo una prensa.',
 ];
 
-export function orderDoneMessage(unlocks) {
+export function orderDoneMessage(unlocks, upgrades = {}) {
   const base = pick([
     'Pedido recibido. El departamento de Gratitud está cerrado por vacaciones. Siguiente pedido adjunto.',
     'Envío completado. Tu ascenso sigue en estudio desde hace 14 años. Ánimo.',
     'Recibido. Un directivo ha sonreído. No sabemos si por ti.',
   ]);
-  if (!unlocks.length) return base;
-  const names = unlocks.map((u) => BUILDINGS[u].name).join(', ');
-  return `${base} Desbloqueado: ${names}.`;
+  const parts = [base];
+  if (unlocks.length) parts.push(`Desbloqueado: ${unlocks.map((u) => BUILDINGS[u].name).join(', ')}.`);
+  const up = Object.entries(upgrades);
+  if (up.length) {
+    const plural = { cinta: 'Cintas', extractor: 'Extractores', prensa: 'Prensas', ensambladora: 'Ensambladoras' };
+    parts.push(`Mejora gratis: ${up.map(([k, v]) => `${plural[k]} a nivel ${v}`).join(', ')}. Más rápidas, mismo sueldo.`);
+  }
+  return parts.join(' ');
 }
 
 export function orderIntro(order) {

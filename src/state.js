@@ -5,10 +5,10 @@
 // jugador local; el día del multijugador vendrán también por WebSocket, y el juego
 // ni se enterará. La simulación (sim.js) es determinista a partir de este estado.
 
-import { BUILDINGS, MAP_W, MAP_H, STARTING_UNLOCKS, orderAt } from './defs.js';
+import { BUILDINGS, MAP_W, MAP_H, STARTING_UNLOCKS, BELT_SPACING, ORDERS, orderAt, levelsAfter } from './defs.js';
 import { generateWorld, key } from './world.js';
 
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 
 export function createGame(seed = Math.floor(Math.random() * 1e9)) {
   const world = generateWorld(seed);
@@ -19,6 +19,7 @@ export function createGame(seed = Math.floor(Math.random() * 1e9)) {
     nextId: 1,
     entities: {},             // "x,y" -> entidad
     unlocked: [...STARTING_UNLOCKS],
+    levels: levelsAfter(0),   // nivel de cada tipo de edificio (sube con pedidos)
     orderIndex: 0,
     orderProgress: 0,
     delivered: {},            // total histórico por objeto
@@ -37,7 +38,8 @@ export function currentOrder(state) {
 
 function addEntity(state, kind, x, y, dir) {
   const e = { id: state.nextId++, kind, x, y, dir };
-  if (kind === 'cinta' || kind === 'divisor') e.item = null;
+  if (kind === 'cinta') e.items = [];      // de delante (p alto) a detrás
+  if (kind === 'divisor') e.item = null;
   if (kind === 'divisor') e.rr = 0;
   if (kind === 'extractor') { e.timer = 0; e.out = []; }
   if (BUILDINGS[kind]?.recipe) { e.inv = {}; e.out = []; e.timer = 0; e.busy = false; }
@@ -96,7 +98,7 @@ export function applyAction(state, action) {
       const e = state.entities[key(action.x, action.y)];
       if (!e) return { ok: false, reason: 'No hay nada ahí' };
       e.dir = (e.dir + 1) % 4;
-      if (e.item) e.item.p = Math.min(e.item.p, 0.5);
+      resettle(e);
       state.rev++;
       return { ok: true };
     }
@@ -111,13 +113,22 @@ function placeOne(state, kind, x, y, dir) {
   const existing = state.entities[key(x, y)];
   if (existing && existing.kind === 'cinta') {
     existing.dir = dir;
-    if (existing.item) existing.item.p = Math.min(existing.item.p, 0.5);
+    resettle(existing);
   } else {
     addEntity(state, kind, x, y, dir);
     if (kind === 'cinta' && !state.firstBelt) { state.firstBelt = true; state.events.push({ type: 'firstBelt' }); }
   }
   state.rev++;
   return { ok: true };
+}
+
+// Al girar una cinta, lo que llevaba vuelve a la mitad para no saltar de golpe
+function resettle(e) {
+  if (e.item) e.item.p = Math.min(e.item.p, 0.5);
+  if (!e.items) return;
+  let lim = 0.5;
+  for (const it of e.items) { it.p = Math.max(0, Math.min(it.p, lim)); lim = it.p - BELT_SPACING; }
+  e.items = e.items.filter((it, i) => i === 0 || it.p <= e.items[i - 1].p - BELT_SPACING + 1e-6);
 }
 
 function countKind(state, kind) {
@@ -134,8 +145,27 @@ export function serialize(state) {
 }
 
 export function deserialize(json) {
-  const data = JSON.parse(json);
-  if (data.version !== SAVE_VERSION) throw new Error('Versión de guardado incompatible');
+  const data = migrate(JSON.parse(json));
   const world = generateWorld(data.seed);
   return { ...data, world, events: [], rev: (data.rev || 0) + 1 };
+}
+
+// Pone al día partidas guardadas con versiones anteriores
+function migrate(data) {
+  if (data.version === 2) {
+    for (const k in data.entities) {
+      const e = data.entities[k];
+      if (e.kind === 'cinta') { e.items = e.item ? [e.item] : []; delete e.item; }
+    }
+    // los pedidos cambiaron: se conserva cuántos llevaba, sin pasarse de la lista
+    data.orderIndex = Math.min(data.orderIndex || 0, ORDERS.length - 1);
+    data.orderProgress = 0;
+    data.levels = levelsAfter(data.orderIndex);
+    for (let i = 0; i < data.orderIndex; i++) {
+      for (const u of ORDERS[i].unlocks) if (!data.unlocked.includes(u)) data.unlocked.push(u);
+    }
+    data.version = 3;
+  }
+  if (data.version !== SAVE_VERSION) throw new Error('Versión de guardado incompatible');
+  return data;
 }
