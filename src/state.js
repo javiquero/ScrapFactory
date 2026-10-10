@@ -51,6 +51,9 @@ export function inBounds(x, y) {
   return x >= 0 && y >= 0 && x < MAP_W && y < MAP_H;
 }
 
+// Lo que se puede pisar con otro edificio (se sustituye)
+export const replaceable = (e) => e.kind === 'cinta' || e.kind === 'divisor';
+
 // Comprueba si se puede colocar algo; devuelve null si sí, o el motivo si no.
 export function canPlace(state, kind, x, y) {
   if (!BUILDINGS[kind]) return 'Edificio desconocido';
@@ -62,6 +65,8 @@ export function canPlace(state, kind, x, y) {
   if (existing) {
     // Las cintas se pueden re-trazar encima de otras cintas
     if (kind === 'cinta' && existing.kind === 'cinta') return null;
+    // Una máquina o un divisor puesto encima de una cinta la sustituye
+    if (kind !== 'cinta' && replaceable(existing)) return null;
     return 'Casilla ocupada';
   }
   return null;
@@ -111,10 +116,11 @@ function placeOne(state, kind, x, y, dir) {
   const why = canPlace(state, kind, x, y);
   if (why) return { ok: false, reason: why };
   const existing = state.entities[key(x, y)];
-  if (existing && existing.kind === 'cinta') {
+  if (existing && existing.kind === 'cinta' && kind === 'cinta') {
     existing.dir = dir;
     resettle(existing);
   } else {
+    if (existing) delete state.entities[key(x, y)]; // sustituye la cinta o el divisor
     addEntity(state, kind, x, y, dir);
     if (kind === 'cinta' && !state.firstBelt) { state.firstBelt = true; state.events.push({ type: 'firstBelt' }); }
   }

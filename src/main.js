@@ -5,7 +5,6 @@ import { DT, BUILDINGS, ITEMS } from './defs.js';
 import { createGame, applyAction, serialize, deserialize, currentOrder } from './state.js';
 import { step } from './sim.js';
 import { makeTextures } from './textures.js';
-import { loadArt } from './sprites/art.js';
 import { Renderer } from './render.js';
 import { attachInput } from './input.js';
 import { UI } from './ui.js';
@@ -31,7 +30,8 @@ async function boot() {
   });
   document.getElementById('game').appendChild(app.canvas);
 
-  const textures = makeTextures(app.renderer, await loadArt());
+  // El arte en PNG (sprites/art.js) está desactivado: Javi prefiere el dibujo por código
+  const textures = makeTextures(app.renderer);
   const icons = {};
   const iconKeys = { cinta: 'belt0', ...Object.fromEntries(Object.keys(BUILDINGS).filter((k) => k !== 'cinta').map((k) => [k, k])) };
   for (const t of Object.keys(ITEMS)) iconKeys['item_' + t] = 'item_' + t;
@@ -128,6 +128,7 @@ async function boot() {
       if (ui.inspected === e) renderer.setSelected(tile);
     },
     onTapEmpty: () => { ui.hideInspect(); renderer.setSelected(null); },
+    onBuildDone: () => selectTool('mano'),
     onLongPress: (tile) => {
       const e = state.entities[key(tile.x, tile.y)];
       if (e) { ui.showInspect(e, state); renderer.setSelected(tile); }

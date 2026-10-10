@@ -199,4 +199,17 @@ for (const lvl of [1, 2, 3]) {
   console.log('✓ formas de cinta: recta, curva y unión');
 }
 
+// 12) Una máquina puesta encima de una cinta la sustituye; encima de otra máquina, no
+{
+  const s = createGame(12);
+  s.unlocked.push('prensa');
+  const X = 6, Y = 6;
+  for (let x = X - 1; x <= X + 3; x++) { delete s.world.nodes[key(x, Y)]; delete s.entities[key(x, Y)]; }
+  applyAction(s, { type: 'placeMany', kind: 'cinta', cells: [{ x: X, y: Y, dir: 0 }, { x: X + 1, y: Y, dir: 0 }] });
+  assert.ok(applyAction(s, { type: 'place', kind: 'prensa', x: X + 1, y: Y, dir: 0 }).ok);
+  assert.equal(s.entities[key(X + 1, Y)].kind, 'prensa');
+  assert.equal(applyAction(s, { type: 'place', kind: 'teletransportador', x: X + 1, y: Y, dir: 0 }).ok, false);
+  console.log('✓ máquina sustituye cinta');
+}
+
 console.log('Todo OK');

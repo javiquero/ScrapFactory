@@ -2,7 +2,7 @@
 // Un dedo: usa la herramienta elegida (construir, trazar cinta, quitar, o mover el mapa).
 // Dos dedos: mover y hacer zoom siempre, sea cual sea la herramienta.
 
-import { inBounds, canPlace } from './state.js';
+import { inBounds, canPlace, replaceable } from './state.js';
 import { key } from './world.js';
 
 const TAP_SLOP = 8;
@@ -30,7 +30,7 @@ export function beltPath(a, b, fallbackDir) {
   return cells;
 }
 
-export function attachInput(canvas, { renderer, getState, ctl, dispatch, onTapEntity, onTapEmpty, onLongPress }) {
+export function attachInput(canvas, { renderer, getState, ctl, dispatch, onTapEntity, onTapEmpty, onLongPress, onBuildDone }) {
   const pointers = new Map();
   let gesture = null;   // gesto de un dedo en curso
   let pinch = null;     // gesto de dos dedos en curso
@@ -166,10 +166,14 @@ export function attachInput(canvas, { renderer, getState, ctl, dispatch, onTapEn
 
     const t = ctl.tool;
     const tap = !g.moved && g.cells.length === 1;
-    // Tocar un edificio que ya existe lo gira, con cualquier herramienta menos Quitar
-    if (tap && t !== 'borrar' && entityAt(g.startTile)) {
+    // Tocar un edificio que ya existe lo gira, con cualquier herramienta menos Quitar;
+    // pero una máquina tocada sobre una cinta la sustituye
+    const there = entityAt(g.startTile);
+    const replaces = there && t !== 'cinta' && t !== 'borrar' && t !== 'mano' && replaceable(there);
+    if (tap && t !== 'borrar' && there && !replaces) {
       renderer.setGhosts([]);
       onTapEntity(g.startTile);
+      if (t !== 'mano') onBuildDone();
       return;
     }
     if (t === 'mano') {
@@ -182,6 +186,8 @@ export function attachInput(canvas, { renderer, getState, ctl, dispatch, onTapEn
       dispatch({ type: 'placeMany', kind: t, cells: g.cells.map(({ x, y }) => ({ x, y, dir: ctl.dir })) }, g.cells.length === 1);
     }
     renderer.setGhosts([]);
+    // al soltar, se vuelve a la mano; lo elegido sigue en la barra para repetir
+    if (t !== 'mano') onBuildDone();
   };
   canvas.addEventListener('pointerup', end);
   canvas.addEventListener('pointercancel', end);

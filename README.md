@@ -9,7 +9,7 @@ Inspirado en Builderment, pero en el navegador: funciona igual en el móvil que 
 - **Mover**: arrastra para mover el mapa.
 - **Tocar un edificio** lo gira (con cualquier herramienta menos Quitar). **Mantenerlo pulsado** abre su ficha para girarlo o quitarlo.
 - **Cinta**: arrastra el dedo desde donde empieza hasta donde acaba; se traza sola en forma de L.
-- **Edificios**: tócalos sobre el mapa, o arrastra para colocar varios seguidos.
+- **Edificios**: tócalos sobre el mapa, o arrastra para colocar varios seguidos. Encima de una cinta, la sustituyen. Al soltar el dedo vuelves a la mano; lo elegido sigue en la barra para repetir.
 - **Dos dedos**: mover y hacer zoom con cualquier herramienta. En ordenador, rueda del ratón para el zoom y `R` para girar.
 - **Más**: catálogo completo. Lo que eliges ahí pasa a la barra de abajo.
 
