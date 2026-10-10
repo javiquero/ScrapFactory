@@ -1,11 +1,11 @@
 // Pintado con PixiJS. Solo LEE el estado; nunca lo modifica.
 
 import { Container, Graphics, Rectangle, Sprite, Texture, TilingSprite } from '../vendor/pixi.min.mjs';
-import { TILE, MAP_W, MAP_H, DX, DY, DT, BELT_SPACING, LEVEL_MULT, beltSpeed } from './defs.js';
+import { planetAt, TILE, MAP_W, MAP_H, DX, DY, DT, BELT_SPACING, LEVEL_MULT, beltSpeed } from './defs.js';
 import { rng, key } from './world.js';
 import { beltShape, itemPos } from './beltShapes.js';
 import { UPRIGHT, HAS_CHUTE } from './sprites/machines.js';
-import { JUNK_KEYS } from './sprites/terrain.js';
+import { NODE_PIECES, NODE_GROUND } from './sprites/terrain.js';
 import { MACHINE_ANCHOR_Y, TOP } from './sprites/common.js';
 
 const TALL_DECOR = ['arbol', 'arbol2', 'arbusto'];
@@ -52,6 +52,10 @@ export class Renderer {
     for (const s of this.sprites.values()) s.destroy({ children: true });
     this.sprites.clear();
     this.drawGround(state);
+    // la nave: única y fija, ocupa 2×2 casillas
+    if (!this.ship) { this.ship = new Sprite(this.tx.nave); this.ship.anchor.set(0.5); this.tallLayer.addChild(this.ship); }
+    this.ship.position.set((state.ship.x + 1) * T, (state.ship.y + 1) * T);
+    this.ship.zIndex = (state.ship.y + 1) * T + HALF;
     this.sync();
   }
 
@@ -79,7 +83,7 @@ export class Renderer {
     const circle = (x, y, r, fill) => each(x - r, y - r, x + r, y + r, (g) => g.circle(x, y, r).fill(fill));
 
     // hierba: verde de base con manchas grandes y suaves de otros tonos
-    gfx.forEach((g) => g.rect(0, 0, W, H).fill(0x8cc56a));
+    gfx.forEach((g) => g.rect(0, 0, W, H).fill(planetAt(state.planet || 0).ground));
     for (let i = 0; i < MAP_W * MAP_H * 0.08; i++) {
       const x = rand() * W, y = rand() * H, r = 50 + rand() * 140;
       circle(x, y, r, { color: rand() < 0.5 ? 0x9bd078 : 0x7fb95e, alpha: 0.22 });
@@ -91,21 +95,22 @@ export class Renderer {
     }
 
     // vertederos: tierra continua con borde irregular
-    const nodes = Object.keys(state.world.nodes).map((k) => k.split(',').map(Number));
+    const nodes = Object.entries(state.world.nodes).map(([k, type]) => [...k.split(',').map(Number), type]);
     const blobs = [];
-    for (const [x, y] of nodes) {
-      blobs.push([x * T + HALF + (rand() - 0.5) * 10, y * T + HALF + (rand() - 0.5) * 10, T * 0.5]);
+    for (const [x, y, type] of nodes) {
+      blobs.push([x * T + HALF + (rand() - 0.5) * 10, y * T + HALF + (rand() - 0.5) * 10, T * 0.5, type]);
       for (let k = 0; k < 3; k++) {
         const a = rand() * Math.PI * 2, d = T * (0.18 + rand() * 0.16);
-        blobs.push([x * T + HALF + Math.cos(a) * d, y * T + HALF + Math.sin(a) * d, T * (0.26 + rand() * 0.12)]);
+        blobs.push([x * T + HALF + Math.cos(a) * d, y * T + HALF + Math.sin(a) * d, T * (0.26 + rand() * 0.12), type]);
       }
     }
+    const tone = (type, i) => (NODE_GROUND[type] || NODE_GROUND.chatarra)[i];
     for (const [x, y, r] of blobs) circle(x, y, r + 4, { color: 0x6f8f45, alpha: 0.55 }); // hierba pisada
-    for (const [x, y, r] of blobs) circle(x, y, r + 1.5, 0x7d6a4c);
-    for (const [x, y, r] of blobs) circle(x, y, r - 1, 0x9b8462);
-    for (const [x, y] of nodes) {
-      for (let k = 0; k < 3; k++) circle(x * T + rand() * T, y * T + rand() * T, 8 + rand() * 10, { color: 0xb9a07a, alpha: 0.35 });
-      for (let k = 0; k < 5; k++) circle(x * T + rand() * T, y * T + rand() * T, 1.5 + rand() * 2, { color: 0x5a4a35, alpha: 0.8 });
+    for (const [x, y, r, type] of blobs) circle(x, y, r + 1.5, tone(type, 0));
+    for (const [x, y, r, type] of blobs) circle(x, y, r - 1, tone(type, 1));
+    for (const [x, y, type] of nodes) {
+      for (let k = 0; k < 3; k++) circle(x * T + rand() * T, y * T + rand() * T, 8 + rand() * 10, { color: tone(type, 2), alpha: 0.35 });
+      for (let k = 0; k < 5; k++) circle(x * T + rand() * T, y * T + rand() * T, 1.5 + rand() * 2, { color: tone(type, 3), alpha: 0.8 });
     }
     gfx.forEach((g) => g.rect(0, 0, W, H).stroke({ width: 10, color: 0x2f5a2a, alpha: 0.35 }));
 
@@ -131,9 +136,10 @@ export class Renderer {
 
     // piezas de chatarra repartidas a su aire
     const pieces = [];
-    for (const [x, y] of nodes) {
+    for (const [x, y, type] of nodes) {
+      const set = NODE_PIECES[type] || NODE_PIECES.chatarra;
       for (let k = 0; k < 3; k++) {
-        const sp = new Sprite(this.tx[JUNK_KEYS[Math.floor(rand() * JUNK_KEYS.length)]]);
+        const sp = new Sprite(this.tx[set[Math.floor(rand() * set.length)]]);
         sp.anchor.set(0.5);
         sp.position.set(x * T + 18 + rand() * (T - 36), y * T + 18 + rand() * (T - 36));
         sp.rotation = (rand() - 0.5) * 0.8;
@@ -275,12 +281,12 @@ export class Renderer {
       }
     }
     for (let i = used; i < this.itemPool.length; i++) this.itemPool[i].visible = false;
+    if (this.ship) this.ship.texture = this.tx[`nave_${Math.floor(time * 6) % 4}`];
 
     // animación de las máquinas que están trabajando
     for (const [e, s] of this.machines) {
       let working = false;
-      if (e.kind === 'teletransportador') working = true;
-      else if (e.kind === 'extractor') working = e.out.length < 4 && !!this.state.world.nodes[key(e.x, e.y)];
+      if (e.kind === 'extractor') working = e.out.length < 4 && !!this.state.world.nodes[key(e.x, e.y)];
       else working = !!e.busy;
       const f = working ? (Math.floor(time * 9) + e.id) % 4 : 0;
       if (s.body) s.body.texture = this.tx[`${e.kind}_${f}`];

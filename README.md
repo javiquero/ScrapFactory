@@ -1,6 +1,6 @@
 # Scrap Factory
 
-Juego web de construir fábricas, tranquilo y sin combate. Eres un colono solo en el planeta SC-7 y Chatarrex S.A., una megacorporación bastante cutre, te va mandando pedidos: chatarra, placas prensadas y engranajes. Montas extractores, cintas y máquinas, y lo envías todo por el teletransportador.
+Juego web de construir fábricas, tranquilo y sin combate. Eres un colono solo en el planeta SC-7 y Chatarrex S.A., una megacorporación bastante cutre, te va mandando pedidos: de chatarra a placas, alambre, engranajes, motores y robots de limpieza. Montas extractores, cintas y máquinas, y lo llevas todo hasta tu nave. Chatarrex te paga por cada envío y por cada pedido, y con ese dinero compras máquinas nuevas y mejoras. Al terminar un planeta, despegas a otro con un recurso nuevo (ver `docs/planetas.md`).
 
 Inspirado en Builderment, pero en el navegador: funciona igual en el móvil que en el ordenador.
 
@@ -11,11 +11,12 @@ Inspirado en Builderment, pero en el navegador: funciona igual en el móvil que 
 - **Cinta**: arrastra el dedo desde donde empieza hasta donde acaba; se traza sola en forma de L.
 - **Edificios**: tócalos sobre el mapa, o arrastra para colocar varios seguidos. Encima de una cinta, la sustituyen. Al soltar el dedo vuelves a la mano; lo elegido sigue en la barra para repetir.
 - **Dos dedos**: mover y hacer zoom con cualquier herramienta. En ordenador, rueda del ratón para el zoom y `R` para girar.
-- **Más**: catálogo completo. Lo que eliges ahí pasa a la barra de abajo.
+- **Nave**: 2×2 casillas, fija. Recibe por los cuatro lados (dos entradas por lado). Tocarla muestra lo enviado.
+- **Más** (o tocar el dinero): catálogo. Ahí se eligen, se **compran** y se **mejoran** los edificios. Lo que eliges pasa a la barra de abajo.
 
 ## Ritmos
 
-Al mismo nivel, dos extractores llenan una cinta y una cinta llena alimenta justo una prensa; una prensa saca justo las placas que necesita una ensambladora. Los pedidos dan mejoras de nivel (×1,5 y ×2) que se aplican a todos los edificios de ese tipo.
+Al mismo nivel, dos extractores llenan una cinta y una cinta llena alimenta justo una prensa; una prensa saca justo las placas que necesita una ensambladora. Las mejoras de nivel (×1,5 y ×2) se compran y se aplican a todos los edificios de ese tipo. La cadena completa, con precios, está en `docs/planetas.md`.
 
 | Nivel | Cinta | Extractor | Prensa (entra → sale) | Ensambladora (entra → sale) |
 | --- | --- | --- | --- | --- |
@@ -38,14 +39,15 @@ Cada push a `main` se despliega solo en Vercel.
 
 | Archivo | Qué hace |
 | --- | --- |
-| `src/defs.js` | Objetos, edificios, recetas y pedidos. Aquí se ajusta el equilibrio. |
+| `src/defs.js` | Objetos (y lo que pagan), edificios (recetas y precios), planetas y pedidos. Aquí se ajusta el equilibrio. |
 | `src/state.js` | Estado de la partida y las **acciones** (único punto que lo modifica). |
 | `src/sim.js` | Simulación de cintas y máquinas, paso fijo y determinista. |
 | `src/world.js` | Generación del mapa a partir de una semilla. |
 | `src/textures.js` | Reúne todos los gráficos. |
-| `src/sprites/` | Un archivo por grupo de gráficos: `belts.js` (cintas, curvas y uniones), `machines.js`, `terrain.js`, `items.js`, y `common.js` con la paleta. |
-| `dev/sprites.html` | Muestrario de todos los sprites para revisar el arte sin jugar (`?filter=extractor&scale=3`). |
+| `src/sprites/` | Un archivo por grupo de gráficos: `belts.js` (cintas, curvas y uniones), `machines.js` (máquinas y la nave), `terrain.js`, `items.js`, y `common.js` con la paleta. |
+| `dev/sprites.html` | Muestrario de todos los sprites para revisar el arte sin jugar (`?filter=^(nave\|robotica)_&scale=3`; el filtro es una expresión regular). |
 | `src/beltShapes.js` | Decide qué forma lleva cada cinta (recta, curva, unión) y por dónde pasan los objetos. |
 | `src/render.js` | Pintado con PixiJS y cámara. |
 | `src/input.js` | Gestos táctiles y de ratón. |
-| `src/ui.js`, `src/messages.js` | Interfaz y comunicados de Chatarrex S.A. |
+| `src/ui.js`, `src/messages.js` | Interfaz (pedido, dinero, catálogo con tienda) y comunicados de Chatarrex S.A. |
+| `docs/planetas.md` | Diseño de la progresión: planetas, nave, economía y recetas. |

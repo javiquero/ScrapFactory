@@ -1,7 +1,8 @@
 // Interfaz en HTML por encima del lienzo: pedido, barra rápida, catálogo, comunicados.
 
-import { BUILDINGS, CATEGORIES, ITEMS, ORDERS, MACHINE_BUFFER, beltRate, extractorRate, craftTime } from './defs.js';
-import { currentOrder } from './state.js';
+import { BUILDINGS, CATEGORIES, ITEMS, PLANETS, MACHINE_BUFFER, beltRate, extractorRate, craftTime, shopAt } from './defs.js';
+import { currentOrder, hasNextPlanet, nextUpgrade } from './state.js';
+import { money, shipText } from './messages.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -12,16 +13,27 @@ const SVG = {
   mas: '<svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><rect x="5" y="5" width="9" height="9" rx="2.5"/><rect x="18" y="5" width="9" height="9" rx="2.5"/><rect x="5" y="18" width="9" height="9" rx="2.5"/><path d="M22.5 18v9M18 22.5h9"/></svg>',
 };
 
-function unlockOrderOf(kind) {
-  const i = ORDERS.findIndex((o) => o.unlocks.includes(kind));
-  return i >= 0 ? i + 1 : null;
+// En qué planeta empieza a venderse un edificio
+function firstPlanet(kind) {
+  const p = PLANETS.findIndex((pl) => pl.shop.includes(kind));
+  return p < 0 ? null : p;
+}
+
+// Receta en texto corto: "2 chatarra → placa prensada"
+function recipeText(kind) {
+  const r = BUILDINGS[kind].recipe;
+  if (!r) return '';
+  return `${Object.entries(r.in).map(([t, n]) => `${n} ${ITEMS[t].name.toLowerCase()}`).join(' + ')} → ${ITEMS[r.out].name.toLowerCase()}`;
 }
 
 export class UI {
-  constructor({ icons, ctl, onSelectTool, onRotateTool, onInspectRotate, onInspectRemove, onReset }) {
+  constructor({ icons, ctl, onSelectTool, onRotateTool, onInspectRotate, onInspectRemove, onReset, onLaunch, onBuy, onUpgrade, getState }) {
     this.icons = icons;
     this.ctl = ctl;
-    this.cb = { onSelectTool, onRotateTool, onInspectRotate, onInspectRemove, onReset };
+    this.cb = { onSelectTool, onRotateTool, onInspectRotate, onInspectRemove, onReset, onLaunch, onBuy, onUpgrade };
+    this.lastMoney = -1;
+    $('launchBtn').addEventListener('click', () => this.cb.onLaunch());
+    $('wallet').addEventListener('click', () => this.openPanel(getState()));
     this.memoQueue = [];
     this.memoTimer = null;
     this.hintTimer = null;
@@ -59,30 +71,64 @@ export class UI {
     bar.querySelector('[data-act=panel]').addEventListener('click', () => this.openPanel(state));
   }
 
-  // ---- Catálogo lateral ----
+  // ---- Catálogo lateral: elegir, comprar y mejorar ----
+  get panelOpen() { return $('panel').classList.contains('open'); }
+
   openPanel(state) {
-    const list = $('panelList');
-    let html = '';
-    for (const cat of CATEGORIES) {
-      html += `<div class="cat">${cat.name}</div>`;
-      for (const k in BUILDINGS) {
-        const b = BUILDINGS[k];
-        if (b.category !== cat.id) continue;
-        const ok = state.unlocked.includes(k);
-        const lock = ok ? `${b.desc} <i>${rateText(k, state)}</i>` : `Se desbloquea al completar el pedido ${unlockOrderOf(k)}.`;
-        html += `<button class="entry ${ok ? '' : 'locked'}" data-k="${k}" ${ok ? '' : 'aria-disabled="true"'}>
-          <img src="${this.icons[k] || ''}" alt=""><span><b>${b.name}</b><small>${lock}</small></span></button>`;
-      }
-    }
-    list.innerHTML = html;
-    list.querySelectorAll('.entry').forEach((el) => el.addEventListener('click', () => {
-      if (!state.unlocked.includes(el.dataset.k)) { this.hint('Aún bloqueado'); return; }
-      this.closePanel();
-      this.cb.onSelectTool(el.dataset.k, true);
-    }));
+    this.renderPanel(state);
     $('scrim').hidden = false;
     $('panel').classList.add('open');
     $('panel').setAttribute('aria-hidden', 'false');
+  }
+
+  renderPanel(state) {
+    const list = $('panelList');
+    const scroll = list.scrollTop;
+    const shop = shopAt(state.planet);
+    const coins = state.money || 0;
+    let html = '';
+    for (const cat of CATEGORIES) {
+      let rows = '';
+      for (const k in BUILDINGS) {
+        const b = BUILDINGS[k];
+        if (b.category !== cat.id) continue;
+        const owned = state.unlocked.includes(k);
+        const img = `<img src="${this.icons[k] || ''}" alt="">`;
+        const recipe = recipeText(k);
+        if (owned) {
+          const up = nextUpgrade(state, k);
+          const side = up
+            ? `<button class="buy up" data-up="${k}" data-cost="${up.cost}" ${coins < up.cost ? 'disabled' : ''}>Nivel ${up.to}<small>${money(up.cost)}</small></button>`
+            : (state.levels[k] ? '<span class="max">Nivel máx.</span>' : '');
+          rows += `<div class="entry"><button class="entry-main" data-k="${k}">${img}<span><b>${b.name}</b><small>${b.desc} <i>${rateText(k, state)}</i></small></span></button>
+            <div class="entry-side">${side}</div></div>`;
+        } else if (shop.includes(k)) {
+          rows += `<div class="entry locked"><div class="entry-main">${img}<span><b>${b.name}</b><small>${recipe || b.desc}</small></span></div>
+            <div class="entry-side"><button class="buy" data-buy="${k}" data-cost="${b.price}" ${coins < b.price ? 'disabled' : ''}>Comprar<small>${money(b.price)}</small></button></div></div>`;
+        } else {
+          const p = firstPlanet(k);
+          rows += `<div class="entry locked soon"><div class="entry-main">${img}<span><b>${b.name}</b><small>${p == null ? 'Próximamente.' : `Se vende en el planeta ${p + 1}.`}</small></span></div></div>`;
+        }
+      }
+      if (rows) html += `<div class="cat">${cat.name}</div>${rows}`;
+    }
+    list.innerHTML = html;
+    list.scrollTop = scroll;
+    $('panelMoney').textContent = money(coins);
+    list.querySelectorAll('[data-k]').forEach((el) => el.addEventListener('click', () => {
+      this.closePanel();
+      this.cb.onSelectTool(el.dataset.k, true);
+    }));
+    list.querySelectorAll('[data-buy]').forEach((el) => el.addEventListener('click', () => this.cb.onBuy(el.dataset.buy)));
+    list.querySelectorAll('[data-up]').forEach((el) => el.addEventListener('click', () => this.cb.onUpgrade(el.dataset.up)));
+  }
+
+  // Con el catálogo abierto, los botones se encienden en cuanto llega el dinero
+  refreshPanelMoney(state) {
+    if (!this.panelOpen) return;
+    const coins = state.money || 0;
+    $('panelMoney').textContent = money(coins);
+    $('panelList').querySelectorAll('[data-cost]').forEach((el) => { el.disabled = coins < Number(el.dataset.cost); });
   }
 
   closePanel() {
@@ -92,14 +138,34 @@ export class UI {
   }
 
   // ---- Pedido ----
+  renderMoney(state) {
+    const m = Math.floor(state.money || 0);
+    if (m === this.lastMoney) return;
+    const big = this.lastMoney >= 0 && m - this.lastMoney >= 50;
+    this.lastMoney = m;
+    $('walletAmount').textContent = money(m);
+    if (big) {
+      const el = $('wallet');
+      el.classList.remove('paid');
+      void el.offsetWidth;
+      el.classList.add('paid');
+    }
+  }
+
   renderOrder(state, celebrate = false) {
+    this.renderMoney(state);
     const o = currentOrder(state);
-    const k = `${state.orderIndex}:${state.orderProgress}`;
+    const k = `${state.planet}:${state.orderIndex}:${state.orderProgress}:${state.planetDone}`;
     if (k === this.lastOrderKey && !celebrate) return;
     this.lastOrderKey = k;
+    const total = PLANETS[state.planet].orders.length;
     $('orderIcon').src = this.icons['item_' + o.item] || '';
-    $('orderTitle').textContent = `Pedido ${state.orderIndex + 1}`;
-    $('orderCount').textContent = `${state.orderProgress} / ${o.amount} ${ITEMS[o.item].name.toLowerCase()}`;
+    $('orderPlanet').textContent = `Planeta ${state.planet + 1} · ${PLANETS[state.planet].nick}`;
+    $('orderTitle').textContent = o.bonus ? 'Pedido extra' : `Pedido ${state.orderIndex + 1} de ${total}`;
+    $('orderCount').textContent = `${state.orderProgress} / ${o.amount} ${ITEMS[o.item].plural} · paga ${money(o.pay)}`;
+    const canLaunch = state.planetDone && hasNextPlanet(state);
+    $('launchBtn').hidden = !canLaunch;
+    if (canLaunch) $('launchBtn').textContent = `Despegar al planeta ${state.planet + 2}`;
     $('orderFill').style.width = `${Math.min(100, (state.orderProgress / o.amount) * 100)}%`;
     if (celebrate) {
       const el = $('order');
@@ -115,12 +181,20 @@ export class UI {
     if (!this.memoTimer && $('memo').hidden) this.nextMemo();
   }
 
+  // Al cambiar de planeta o de partida, lo pendiente ya no viene a cuento
+  clearMemos() {
+    this.memoQueue.length = 0;
+    this.nextMemo();
+  }
+
   nextMemo() {
     clearTimeout(this.memoTimer);
     this.memoTimer = null;
     const text = this.memoQueue.shift();
     if (!text) { $('memo').hidden = true; return; }
     $('memoText').textContent = text;
+    // el comunicado va justo debajo de la etiqueta del pedido, que cambia de alto
+    $('memo').style.top = `${$('wallet').getBoundingClientRect().bottom + 10}px`;
     $('memo').hidden = false;
     const ms = Math.min(11000, 3500 + text.length * 45);
     this.memoTimer = setTimeout(() => this.nextMemo(), ms);
@@ -138,15 +212,31 @@ export class UI {
   showInspect(e, state) {
     if (!e) return this.hideInspect();
     this.inspected = e;
+    this.shipOpen = false;
     $('inspectIcon').src = this.icons[e.kind] || '';
     $('inspectName').textContent = BUILDINGS[e.kind].name;
     $('inspectInfo').textContent = describe(e, state);
-    $('inspectRotate').hidden = e.kind === 'teletransportador';
+    $('inspectRotate').hidden = false;
+    $('inspectRemove').hidden = false;
+    $('inspect').hidden = false;
+  }
+
+  // La nave no se gira ni se quita: solo se mira
+  showShip(state) {
+    this.inspected = null;
+    this.shipOpen = true;
+    $('inspectIcon').src = this.icons.nave || '';
+    $('inspectName').textContent = 'Tu nave';
+    $('inspectInfo').textContent = shipText(state);
+    $('inspectRotate').hidden = true;
+    $('inspectRemove').hidden = true;
     $('inspect').hidden = false;
   }
 
   refreshInspect(state) {
-    if (!this.inspected || $('inspect').hidden) return;
+    if ($('inspect').hidden) return;
+    if (this.shipOpen) { $('inspectInfo').textContent = shipText(state); return; }
+    if (!this.inspected) return;
     const e = this.inspected;
     if (state.entities[`${e.x},${e.y}`] !== e) return this.hideInspect();
     $('inspectInfo').textContent = describe(e, state);
@@ -154,6 +244,7 @@ export class UI {
 
   hideInspect() {
     this.inspected = null;
+    this.shipOpen = false;
     $('inspect').hidden = true;
   }
 
@@ -169,15 +260,14 @@ export function rateText(kind, state) {
   switch (kind) {
     case 'cinta': return `Nivel ${lv.cinta} · hasta ${num(beltRate(lv.cinta))} objetos/s`;
     case 'divisor': return `Tan rápido como las cintas (${num(beltRate(lv.cinta))}/s)`;
-    case 'extractor': return `Nivel ${lv.extractor} · ${num(extractorRate(lv.extractor))} chatarra/s`;
-    case 'prensa':
-    case 'ensambladora': {
-      const r = BUILDINGS[kind].recipe;
+    case 'extractor': return `Nivel ${lv.extractor} · ${num(extractorRate(lv.extractor))} por segundo de lo que tenga debajo`;
+    default: {
+      const r = BUILDINGS[kind]?.recipe;
+      if (!r) return '';
       const per = 1 / craftTime(kind, lv[kind]);
       const ins = Object.entries(r.in).map(([t, n]) => `${num(n * per)} ${ITEMS[t].name.toLowerCase()}`).join(' + ');
       return `Nivel ${lv[kind]} · ${ins} → ${num(per)} ${ITEMS[r.out].name.toLowerCase()} por segundo`;
     }
-    default: return '';
   }
 }
 
@@ -188,19 +278,16 @@ function describe(e, state) {
       return `${rateText('cinta', state)} · lleva ${e.items.length}`;
     case 'divisor':
       return e.item ? `Lleva: ${n(e.item.type)}` : 'Vacío';
-    case 'extractor':
-      return `${rateText('extractor', state)}${e.out.length >= 4 ? ' · salida atascada' : ''}`;
-    case 'prensa':
-    case 'ensambladora': {
-      const r = BUILDINGS[e.kind].recipe;
+    case 'extractor': {
+      const node = state.world.nodes[`${e.x},${e.y}`];
+      const what = node ? ITEMS[node].name.toLowerCase() : 'nada';
+      return `Saca ${what} · ${num(extractorRate(state.levels.extractor))}/s${e.out.length >= 4 ? ' · salida atascada' : ''}`;
+    }
+    default: {
+      const r = BUILDINGS[e.kind]?.recipe;
+      if (!r) return '';
       const parts = Object.keys(r.in).map((t) => `${e.inv[t] || 0}/${MACHINE_BUFFER} ${n(t)}`);
       return `${rateText(e.kind, state)}. Dentro: ${parts.join(', ')} · ${e.busy ? 'trabajando' : 'esperando'}`;
     }
-    case 'teletransportador': {
-      const total = Object.values(state.delivered).reduce((a, b) => a + b, 0);
-      return `${total} cosas enviadas a la Tierra`;
-    }
-    default:
-      return '';
   }
 }

@@ -2,15 +2,22 @@
 // No toca nada de pantalla; solo lee y escribe el estado. Determinista.
 
 import {
-  BUILDINGS, BELT_SPACING, DT, DX, DY, ITEMS, MACHINE_BUFFER, OUTPUT_BUFFER, MAX_LEVEL,
-  opposite, orderAt, beltSpeed, extractorRate, craftTime,
+  BUILDINGS, BELT_SPACING, DT, DX, DY, ITEMS, MACHINE_BUFFER, OUTPUT_BUFFER, SHIP_SIZE,
+  opposite, orderAt, planetAt, beltSpeed, extractorRate, craftTime,
 } from './defs.js';
 import { key } from './world.js';
+
+// La nave ocupa 2×2: cualquier cosa que entre por cualquiera de sus bordes se envía
+const onShip = (state, x, y) => {
+  const s = state.ship;
+  return !!s && x >= s.x && y >= s.y && x < s.x + SHIP_SIZE && y < s.y + SHIP_SIZE;
+};
 
 const EPS = 1e-6;
 
 // Intenta meter un objeto en la casilla (x, y), viajando en dirección `dir`.
 export function tryInsert(state, x, y, type, dir) {
+  if (onShip(state, x, y)) { deliver(state, type); return true; }
   const e = state.entities[key(x, y)];
   if (!e) return false;
   const fromSide = opposite(dir); // lado por el que entra
@@ -26,11 +33,8 @@ export function tryInsert(state, x, y, type, dir) {
       if (e.item || dir !== e.dir) return false;
       e.item = { type, p: 0, from: fromSide };
       return true;
-    case 'teletransportador':
-      deliver(state, type);
-      return true;
-    case 'prensa':
-    case 'ensambladora': {
+    default: {
+      if (!BUILDINGS[e.kind]?.recipe) return false;
       if (fromSide === e.dir) return false; // no se entra por la salida
       const need = BUILDINGS[e.kind].recipe.in;
       if (!need[type]) return false;
@@ -38,30 +42,28 @@ export function tryInsert(state, x, y, type, dir) {
       e.inv[type] = (e.inv[type] || 0) + 1;
       return true;
     }
-    default:
-      return false;
   }
 }
 
+// Llega algo a la nave: Chatarrex lo paga siempre, y si es lo del pedido, cuenta.
 function deliver(state, type) {
   state.delivered[type] = (state.delivered[type] || 0) + 1;
-  const order = orderAt(state.orderIndex);
+  state.money = (state.money || 0) + (ITEMS[type]?.value || 0);
+  const order = orderAt(state.planet || 0, state.orderIndex);
   if (type === order.item) {
     state.orderProgress++;
     if (state.orderProgress >= order.amount) {
-      for (const u of order.unlocks) if (!state.unlocked.includes(u)) state.unlocked.push(u);
-      const upgrades = {};
-      for (const [k, v] of Object.entries(order.upgrades || {})) {
-        const nv = Math.min(MAX_LEVEL, Math.max(state.levels[k] || 1, v));
-        if (nv !== state.levels[k]) { state.levels[k] = nv; upgrades[k] = nv; }
+      state.money += order.pay;
+      state.events.push({ type: 'orderDone', index: state.orderIndex, pay: order.pay });
+      // el último pedido de la tanda abre el despegue al siguiente planeta
+      if (!state.planetDone && state.orderIndex === planetAt(state.planet || 0).orders.length - 1) {
+        state.planetDone = true;
+        state.events.push({ type: 'planetDone', planet: state.planet || 0 });
       }
-      state.events.push({ type: 'orderDone', index: state.orderIndex, unlocks: order.unlocks, upgrades });
       state.orderIndex++;
       state.orderProgress = 0;
       state.rev++;
     }
-  } else {
-    state.events.push({ type: 'wrongItem', item: type });
   }
   state.events.push({ type: 'delivered', item: type });
 }
@@ -92,9 +94,9 @@ export function step(state) {
         pushOut(state, e);
         break;
       }
-      case 'prensa':
-      case 'ensambladora': {
-        const r = BUILDINGS[e.kind].recipe;
+      default: {
+        const r = BUILDINGS[e.kind]?.recipe;
+        if (!r) break;
         if (!e.busy && e.out.length < OUTPUT_BUFFER && hasAll(e.inv, r.in)) {
           for (const t in r.in) e.inv[t] -= r.in[t];
           e.busy = true;

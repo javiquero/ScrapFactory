@@ -1,7 +1,7 @@
 // Qué forma dibujar en cada cinta según lo que le llega por los lados,
 // y por dónde pasan los objetos dentro de la casilla. Solo lee el estado.
 
-import { DX, DY, opposite } from './defs.js';
+import { BUILDINGS, DX, DY, opposite } from './defs.js';
 import { key } from './world.js';
 
 // ¿El vecino `n` empuja cosas en la dirección `toward` (hacia nuestra casilla)?
@@ -10,13 +10,11 @@ export function feedsInto(n, toward) {
   switch (n.kind) {
     case 'cinta':
     case 'extractor':
-    case 'prensa':
-    case 'ensambladora':
       return n.dir === toward;
     case 'divisor':
       return toward !== opposite(n.dir); // sale por izquierda, frente y derecha
     default:
-      return false;
+      return !!BUILDINGS[n.kind]?.recipe && n.dir === toward; // máquinas con receta
   }
 }
 

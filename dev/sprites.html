@@ -25,7 +25,8 @@
     await app.init({ width: cols * 96 * scale / 1.4, height: 400, background: '#8cc56a', antialias: true, resolution: 1 });
     document.body.appendChild(app.canvas);
     const t = makeTextures(app.renderer, params.get('art') === '1' ? await loadArt('../assets/art/') : {});
-    const keys = Object.keys(t).filter((k) => k.includes(filter) && !/^belt\d$/.test(k));
+    const re = new RegExp(filter); // admite expresiones: ?filter=^(prensa|nave)_
+    const keys = Object.keys(t).filter((k) => re.test(k) && !/^belt\d$/.test(k));
     const cell = 96 * scale / 1.4;
     keys.forEach((k, i) => {
       const c = new Container();

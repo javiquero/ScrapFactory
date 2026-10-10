@@ -2,7 +2,7 @@
 
 import { Application } from '../vendor/pixi.min.mjs';
 import { DT, BUILDINGS, ITEMS } from './defs.js';
-import { createGame, applyAction, serialize, deserialize, currentOrder } from './state.js';
+import { createGame, applyAction, serialize, deserialize, currentOrder, isShip } from './state.js';
 import { step } from './sim.js';
 import { makeTextures } from './textures.js';
 import { Renderer } from './render.js';
@@ -35,6 +35,7 @@ async function boot() {
   const icons = {};
   const iconKeys = { cinta: 'belt0', ...Object.fromEntries(Object.keys(BUILDINGS).filter((k) => k !== 'cinta').map((k) => [k, k])) };
   for (const t of Object.keys(ITEMS)) iconKeys['item_' + t] = 'item_' + t;
+  iconKeys.nave = 'nave';
   await Promise.all(Object.entries(iconKeys).map(async ([name, tk]) => {
     try { icons[name] = await app.renderer.extract.base64(textures[tk]); } catch { icons[name] = ''; }
   }));
@@ -48,14 +49,14 @@ async function boot() {
   }
   if (!state) { state = createGame(); isNew = true; }
 
-  const ctl = { tool: 'mano', dir: 0, recent: ['extractor', 'teletransportador', 'prensa', 'ensambladora', 'divisor'] };
+  const ctl = { tool: 'mano', dir: 0, recent: ['extractor', 'prensa', 'ensambladora', 'divisor', 'trefiladora', 'cortadora'] };
   const renderer = new Renderer(app, textures);
   renderer.setState(state);
 
   const cam = (() => { try { return JSON.parse(store.get(CAM_KEY)); } catch { return null; } })();
   const defaultZoom = Math.min(app.screen.width, app.screen.height) < 600 ? 0.6 : 0.9;
   if (cam && !isNew) renderer.centerOn(cam.x, cam.y, cam.zoom);
-  else renderer.centerOn(state.world.spawn.x, state.world.spawn.y, defaultZoom);
+  else renderer.centerOn(state.ship.x + 0.5, state.ship.y + 0.5, defaultZoom);
 
   // Único punto por el que cambia la partida. En multijugador, aquí se enviará
   // la acción al servidor y se aplicarán también las que lleguen de los demás.
@@ -104,15 +105,36 @@ async function boot() {
     onReset: () => {
       state = createGame();
       renderer.setState(state);
-      renderer.centerOn(state.world.spawn.x, state.world.spawn.y, defaultZoom);
+      renderer.centerOn(state.ship.x + 0.5, state.ship.y + 0.5, defaultZoom);
       ctl.tool = 'mano';
       ctl.dir = 0;
       ui.hideInspect();
       ui.renderBar(state);
       ui.renderOrder(state, true);
+      ui.clearMemos();
       welcome();
       save();
     },
+    onLaunch: () => {
+      if (!confirm(`¿Despegar al planeta ${state.planet + 2}? La fábrica de este planeta se queda aquí: empiezas de cero con un recurso nuevo.`)) return;
+      dispatch({ type: 'nextPlanet' }, true);
+      flushEvents();
+      save();
+    },
+    onBuy: (kind) => {
+      if (!dispatch({ type: 'buy', kind }, true).ok) return;
+      ctl.recent = [kind, ...ctl.recent.filter((k) => k !== kind)];
+      flushEvents();
+      ui.renderPanel(state);
+      save();
+    },
+    onUpgrade: (kind) => {
+      if (!dispatch({ type: 'upgrade', kind }, true).ok) return;
+      flushEvents();
+      ui.renderPanel(state);
+      save();
+    },
+    getState: () => state,
   });
 
   attachInput(app.canvas, {
@@ -121,15 +143,16 @@ async function boot() {
     ctl,
     dispatch,
     onTapEntity: (tile) => {
+      if (isShip(state, tile.x, tile.y)) { ui.showShip(state); renderer.setSelected(null); return; }
       const e = state.entities[key(tile.x, tile.y)];
       if (!e) return;
-      if (e.kind === 'teletransportador') { ui.showInspect(e, state); renderer.setSelected(tile); return; }
       dispatch({ type: 'rotate', x: tile.x, y: tile.y });
       if (ui.inspected === e) renderer.setSelected(tile);
     },
     onTapEmpty: () => { ui.hideInspect(); renderer.setSelected(null); },
     onBuildDone: () => selectTool('mano'),
     onLongPress: (tile) => {
+      if (isShip(state, tile.x, tile.y)) { ui.showShip(state); return; }
       const e = state.entities[key(tile.x, tile.y)];
       if (e) { ui.showInspect(e, state); renderer.setSelected(tile); }
     },
@@ -146,28 +169,40 @@ async function boot() {
     ui.memo(msg.orderIntro(currentOrder(state)));
     ui.memo(msg.TIPS[0]);
   }
-  let lastWrong = -1e9;
   function flushEvents() {
     if (!state.events.length) return;
     for (const ev of state.events) {
       if (ev.type === 'orderDone') {
-        ui.memo(msg.orderDoneMessage(ev.unlocks, ev.upgrades));
-        ui.memo(msg.orderIntro(currentOrder(state)));
+        ui.memo(msg.orderDoneMessage(ev.pay));
+        if (!state.planetDone) ui.memo(msg.orderIntro(currentOrder(state)));
         ui.renderOrder(state, true);
         ui.renderBar(state);
-      } else if (ev.type === 'wrongItem' && performance.now() - lastWrong > 30000) {
-        lastWrong = performance.now();
-        ui.memo(msg.wrongItemMessage(ev.item));
+      } else if (ev.type === 'planetDone') {
+        ui.memo(msg.planetDoneMessage(state));
+        ui.renderOrder(state, true);
+      } else if (ev.type === 'planetStart') {
+        // mapa nuevo: se repinta el planeta entero y la cámara vuelve a la nave
+        renderer.setState(state);
+        renderer.centerOn(state.ship.x + 0.5, state.ship.y + 0.5, defaultZoom);
+        ui.hideInspect();
+        ui.renderBar(state);
+        ui.renderOrder(state, true);
+        ui.clearMemos();
+        for (const m of msg.planetIntro(state)) ui.memo(m);
+        ui.memo(msg.orderIntro(currentOrder(state)));
+      } else if (ev.type === 'bought') {
+        ui.memo(msg.boughtMessage(ev.kind));
+        ui.renderBar(state);
+      } else if (ev.type === 'upgraded') {
+        ui.memo(msg.upgradedMessage(ev.kind, ev.level));
       } else if (ev.type === 'firstBelt') {
         ui.memo(msg.FIRST_BELT);
-      } else if (ev.type === 'lastTeleporter') {
-        ui.memo(msg.LAST_TELEPORTER);
       }
     }
     state.events.length = 0;
   }
   if (isNew) welcome();
-  else ui.memo('Bienvenido de vuelta, colono. La fábrica no se ha movido. Tú tampoco cobras, por cierto.');
+  else ui.memo('Bienvenido de vuelta, colono. La fábrica no se ha movido. Tus créditos tampoco: siguen donde los dejaste.');
   setInterval(() => { if (document.getElementById('memo').hidden) ui.memo(msg.randomTip()); }, 90000);
 
   // ---- Guardado ----
@@ -193,7 +228,7 @@ async function boot() {
     flushEvents();
     renderer.update(time, acc / DT);
     ui.renderOrder(state);
-    if ((inspectTick = (inspectTick + 1) % 15) === 0) ui.refreshInspect(state);
+    if ((inspectTick = (inspectTick + 1) % 15) === 0) { ui.refreshInspect(state); ui.refreshPanelMoney(state); }
   });
 
   window.addEventListener('resize', () => renderer.clamp());

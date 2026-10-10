@@ -1,7 +1,7 @@
 // Generación del planeta: suelo, nodos de recursos y decoración.
 // Determinista a partir de una semilla, así dos jugadores con la misma semilla ven el mismo mapa.
 
-import { MAP_W, MAP_H } from './defs.js';
+import { MAP_W, MAP_H, planetAt } from './defs.js';
 
 export function rng(seed) {
   let s = seed >>> 0;
@@ -33,26 +33,33 @@ function blob(nodes, rand, cx, cy, type, size) {
   for (const [x, y] of cells) nodes[key(x, y)] = type;
 }
 
-export function generateWorld(seed) {
+export function generateWorld(seed, planet = 0) {
   const rand = rng(seed);
   const nodes = {};
   const cx = Math.floor(MAP_W / 2);
   const cy = Math.floor(MAP_H / 2);
+  const res = planetAt(planet).resources;
+  // El recurso nuevo del planeta sale un poco más lejos que los conocidos
+  const pick = (i) => res[i % res.length];
 
-  // Parcelas garantizadas cerca del punto de aterrizaje
-  blob(nodes, rand, cx - 6, cy - 2, 'chatarra', 9);
-  blob(nodes, rand, cx + 6, cy + 3, 'chatarra', 6);
-  blob(nodes, rand, cx - 3, cy + 7, 'chatarra', 7);
+  // Parcelas garantizadas cerca del punto de aterrizaje: una de cada recurso
+  blob(nodes, rand, cx - 6, cy - 2, pick(0), 9);
+  blob(nodes, rand, cx + 6, cy + 3, pick(1), res.length > 1 ? 8 : 6);
+  blob(nodes, rand, cx - 3, cy + 7, pick(2), 7);
+  for (let i = 3; i < res.length; i++) {
+    const a = (i / res.length) * Math.PI * 2;
+    blob(nodes, rand, cx + Math.round(Math.cos(a) * 9), cy + Math.round(Math.sin(a) * 9), res[i], 7);
+  }
 
   // Resto del mapa
-  for (let i = 0; i < 18; i++) {
+  for (let i = 0; i < 18 + (res.length - 1) * 6; i++) {
     const x = 3 + Math.floor(rand() * (MAP_W - 6));
     const y = 3 + Math.floor(rand() * (MAP_H - 6));
     if (Math.abs(x - cx) < 5 && Math.abs(y - cy) < 5) continue;
-    blob(nodes, rand, x, y, 'chatarra', 5 + Math.floor(rand() * 8));
+    blob(nodes, rand, x, y, pick(i), 5 + Math.floor(rand() * 8));
   }
 
-  // Zona despejada alrededor del teletransportador inicial
+  // Zona despejada alrededor de la nave (2×2, esquina en el centro)
   for (let y = cy - 2; y <= cy + 2; y++) for (let x = cx - 2; x <= cx + 2; x++) delete nodes[key(x, y)];
 
   // Decoración (no bloquea): árboles, arbustos, flores, piedras, matas

@@ -95,6 +95,30 @@ const JUNK = {
 
 export const JUNK_KEYS = Object.keys(JUNK).map((k) => 'junk_' + k);
 
+// Esquirlas de cristal para los cráteres (planeta 2)
+function shard(g, x, y, h, w, tilt, light, dark) {
+  const c = Math.cos(tilt), sn = Math.sin(tilt);
+  const P = (px, py) => [x + px * c - py * sn, y + px * sn + py * c];
+  const pts = [P(-w, 0), P(-w * 0.4, -h), P(w * 0.5, -h * 0.85), P(w, 0)].flat();
+  g.poly(pts).fill(grad([[0, light], [1, dark]], 0, 0, 1, 1)).stroke({ width: 1.5, color: INK });
+  const [hx, hy] = P(-w * 0.25, -h * 0.75), [lx, ly] = P(-w * 0.35, -h * 0.2);
+  line(g, hx, hy, lx, ly, 1.3, 0xffffff, 0.8);
+}
+const CRYSTALS = {
+  a(g, s) { sh(s, 22, 36, 15, 5); shard(g, 16, 36, 22, 6, -0.25, 0xe9fdff, 0x5fb8c6); shard(g, 25, 37, 28, 7, 0.1, 0xf4ffff, 0x6fc8d4); shard(g, 32, 36, 16, 5, 0.4, 0xe0fbff, 0x4fa8b6); },
+  b(g, s) { sh(s, 22, 35, 14, 5); shard(g, 19, 35, 18, 6, -0.4, 0xd8f6ff, 0x5f9fd6); shard(g, 27, 36, 24, 7, 0.2, 0xeef9ff, 0x6fb0e0); },
+  c(g, s) { sh(s, 22, 36, 16, 5); shard(g, 14, 36, 14, 5, -0.5, 0xf0d8ff, 0x9a7fd6); shard(g, 22, 37, 26, 7, 0, 0xf4ffff, 0x6fc8d4); shard(g, 30, 36, 18, 6, 0.45, 0xe9fdff, 0x5fb8c6); },
+};
+export const CRYSTAL_KEYS = Object.keys(CRYSTALS).map((k) => 'crys_' + k);
+
+// Piezas sueltas que se reparten por cada tipo de nodo
+export const NODE_PIECES = { chatarra: JUNK_KEYS, cristal: CRYSTAL_KEYS };
+// Colores de la tierra de cada tipo de nodo: borde, relleno, claros, motas
+export const NODE_GROUND = {
+  chatarra: [0x7d6a4c, 0x9b8462, 0xb9a07a, 0x5a4a35],
+  cristal: [0x5f6f80, 0x8a9aab, 0xb8d8e6, 0x3f4f60],
+};
+
 // ---- Decoración ----
 function tree(g, s, variant) {
   sh(s, 33, 58, 20, 7, 0.4);
@@ -109,6 +133,7 @@ function tree(g, s, variant) {
 const hgradTrunk = () => grad([[0, 0x6b4b2e], [0.4, 0xa07650], [1, 0x5a3e25]], 0, 0, 1, 0);
 
 export function makeTerrain(renderer, t, art = {}) {
+  for (const [k, draw] of Object.entries(CRYSTALS)) t['crys_' + k] = tex(renderer, draw, J, J, 2.5);
   for (const [k, draw] of Object.entries(JUNK)) {
     const png = art['junk_' + k];
     t['junk_' + k] = png

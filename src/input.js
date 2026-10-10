@@ -2,7 +2,7 @@
 // Un dedo: usa la herramienta elegida (construir, trazar cinta, quitar, o mover el mapa).
 // Dos dedos: mover y hacer zoom siempre, sea cual sea la herramienta.
 
-import { inBounds, canPlace, replaceable } from './state.js';
+import { inBounds, canPlace, replaceable, isShip } from './state.js';
 import { key } from './world.js';
 
 const TAP_SLOP = 8;
@@ -37,7 +37,9 @@ export function attachInput(canvas, { renderer, getState, ctl, dispatch, onTapEn
   let pinchHappened = false;
   let pressTimer = null;
   const cancelPress = () => { clearTimeout(pressTimer); pressTimer = null; };
-  const entityAt = (t) => getState().entities[key(t.x, t.y)];
+  // La nave no es una entidad, pero se toca como si lo fuera (abre su ficha)
+  const SHIP = { kind: 'nave' };
+  const entityAt = (t) => getState().entities[key(t.x, t.y)] || (isShip(getState(), t.x, t.y) ? SHIP : null);
 
   const local = (ev) => {
     const r = canvas.getBoundingClientRect();
