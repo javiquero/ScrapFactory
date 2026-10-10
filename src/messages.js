@@ -22,7 +22,7 @@ export const TIPS = [
   'Recordatorio: el casco de la empresa es solo decorativo. No lo uses si cae algo.',
   'El aire local tiene un 3 % de radiactividad. Dentro de lo aceptable para el personal de campo.',
   'El departamento de Recursos Humanos te recuerda que no hay departamento de Recursos Humanos.',
-  'Toca un edificio para girarlo. Mantenlo pulsado para ver qué tiene dentro o quitarlo.',
+  'Toca un edificio para girarlo. Mantenlo pulsado para copiarlo: el siguiente toque pone otro igual.',
   'Consejo de eficiencia: dos extractores llenan una cinta, y una cinta llena alimenta justo una prensa.',
   'La nave tiene dos entradas por cada lado. Ocho cintas a la vez, si eres de los que no duermen.',
 ];

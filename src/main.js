@@ -154,7 +154,16 @@ async function boot() {
     onLongPress: (tile) => {
       if (isShip(state, tile.x, tile.y)) { ui.showShip(state); return; }
       const e = state.entities[key(tile.x, tile.y)];
-      if (e) { ui.showInspect(e, state); renderer.setSelected(tile); }
+      if (!e) return;
+      // Copiar: se coge ese mismo edificio, con su orientación; el siguiente toque pone otro igual
+      if (state.unlocked.includes(e.kind)) {
+        selectTool(e.kind);
+        ctl.dir = e.dir;
+        ui.renderBar(state);
+        ui.hint(`Copiado: ${BUILDINGS[e.kind].name.toLowerCase()}. Toca donde quieras otra copia`);
+      }
+      ui.showInspect(e, state);
+      renderer.setSelected(tile);
     },
   });
 
