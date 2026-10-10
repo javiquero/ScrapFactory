@@ -4,6 +4,7 @@ import { Container, Graphics, Sprite } from '../vendor/pixi.min.mjs';
 import { TILE, MAP_W, MAP_H, DX, DY, DT, BELT_SPACING, LEVEL_MULT, beltSpeed } from './defs.js';
 import { rng, key } from './world.js';
 import { beltShape, itemPos } from './beltShapes.js';
+import { ANIMATED } from './sprites/machines.js';
 
 const T = TILE;
 const HALF = T / 2;
@@ -25,6 +26,7 @@ export class Renderer {
     this.sprites = new Map();   // id de entidad -> sprite
     this.itemPool = [];
     this.ghostPool = [];
+    this.ghostChutes = [];
     this.lastRev = -1;
     this.carriers = [];         // cintas y divisores (llevan objetos)
     this.machines = [];
@@ -36,7 +38,7 @@ export class Renderer {
   setState(state) {
     this.state = state;
     this.lastRev = -1;
-    for (const s of this.sprites.values()) s.destroy();
+    for (const s of this.sprites.values()) s.destroy({ children: true });
     this.sprites.clear();
     this.drawGround(state);
     this.sync();
@@ -95,20 +97,30 @@ export class Renderer {
       const e = state.entities[k];
       alive.add(e.id);
       occupied.add(k);
+      const upright = ANIMATED.includes(e.kind);
       let s = this.sprites.get(e.id);
       if (!s) {
-        s = new Sprite(this.textureFor(e));
-        s.anchor.set(0.5);
+        if (upright) {
+          // máquina: cuerpo siempre derecho + rampa de salida que gira
+          s = new Container();
+          s.body = new Sprite(this.textureFor(e)); s.body.anchor.set(0.5);
+          s.chute = new Sprite(this.tx.chute); s.chute.anchor.set(0.5);
+          s.addChild(s.chute, s.body);
+        } else {
+          s = new Sprite(this.textureFor(e));
+          s.anchor.set(0.5);
+        }
         this.entityLayer.addChild(s);
         this.sprites.set(e.id, s);
       }
       s.position.set(e.x * T + HALF, e.y * T + HALF);
-      s.rotation = e.kind === 'teletransportador' ? 0 : (e.dir * Math.PI) / 2;
+      if (upright) s.chute.rotation = (e.dir * Math.PI) / 2;
+      else s.rotation = e.kind === 'teletransportador' ? 0 : (e.dir * Math.PI) / 2;
       if (e.kind === 'cinta' || e.kind === 'divisor') this.carriers.push([e, s, e.kind === 'cinta' ? beltShape(state, e) : null]);
       else this.machines.push([e, s]);
     }
     for (const [id, s] of this.sprites) {
-      if (!alive.has(id)) { s.destroy(); this.sprites.delete(id); }
+      if (!alive.has(id)) { s.destroy({ children: true }); this.sprites.delete(id); }
     }
     // la decoración se esconde bajo los edificios
     for (const d of this.decorLayer.children) d.visible = !occupied.has(d.label);
@@ -153,14 +165,14 @@ export class Renderer {
     }
     for (let i = used; i < this.itemPool.length; i++) this.itemPool[i].visible = false;
 
-    // pequeño "latido" de las máquinas que están trabajando
+    // animación de las máquinas que están trabajando
     for (const [e, s] of this.machines) {
+      if (e.kind === 'teletransportador') { s.scale.set(1 + Math.sin(time * 3) * 0.03); continue; }
       let working = false;
-      if (e.kind === 'extractor') working = e.out.length < 4;
-      else if (e.busy !== undefined) working = e.busy;
-      const pulse = working ? 1 + Math.sin(time * 10 + e.id) * 0.04 : 1;
-      if (e.kind === 'teletransportador') s.scale.set(1 + Math.sin(time * 3) * 0.03);
-      else s.scale.set(pulse);
+      if (e.kind === 'extractor') working = e.out.length < 4 && !!this.state.world.nodes[key(e.x, e.y)];
+      else working = !!e.busy;
+      const f = working ? (Math.floor(time * 9) + e.id) % 4 : 0;
+      if (s.body) s.body.texture = this.tx[`${e.kind}_${f}`];
     }
   }
 
@@ -171,13 +183,23 @@ export class Renderer {
       if (!s) { s = new Sprite(); s.anchor.set(0.5); this.ghostLayer.addChild(s); this.ghostPool.push(s); }
       s.texture = g.kind === 'cinta' ? this.tx.belt0 : g.kind === 'borrar' ? this.tx.piedra : this.tx[g.kind];
       s.position.set(g.x * T + HALF, g.y * T + HALF);
-      s.rotation = g.kind === 'teletransportador' ? 0 : (g.dir * Math.PI) / 2;
+      const upright = ANIMATED.includes(g.kind);
+      s.rotation = g.kind === 'teletransportador' || upright ? 0 : (g.dir * Math.PI) / 2;
       s.alpha = 0.6;
       s.tint = g.valid ? 0xffffff : 0xff6b6b;
       s.visible = g.kind !== 'borrar';
+      // rampa de salida del fantasma, para ver hacia dónde saldrá
+      let c = this.ghostChutes[i];
+      if (!c) { c = new Sprite(this.tx.chute); c.anchor.set(0.5); this.ghostLayer.addChildAt(c, 0); this.ghostChutes.push(c); }
+      c.visible = upright;
+      c.position.copyFrom(s.position);
+      c.rotation = (g.dir * Math.PI) / 2;
+      c.alpha = 0.6;
+      c.tint = s.tint;
       i++;
     }
-    for (; i < this.ghostPool.length; i++) this.ghostPool[i].visible = false;
+    for (let j = i; j < this.ghostPool.length; j++) this.ghostPool[j].visible = false;
+    for (let j = i; j < this.ghostChutes.length; j++) this.ghostChutes[j].visible = false;
     // marco de las casillas afectadas
     const h = this.highlight;
     h.clear();

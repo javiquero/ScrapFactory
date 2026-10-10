@@ -10,6 +10,7 @@ Responder y comentar en español. Los textos del juego, en español con humor co
 - Controles: tocar un edificio lo gira; mantenerlo pulsado abre la ficha de girar/quitar.
 - Web, móvil primero, desplegado en Vercel desde `main`. Sin paso de compilación.
 - Sprites 2D con PixiJS v8 (vendorizado en `vendor/pixi.min.mjs`), dibujados con código en `src/textures.js`.
+- Máquinas: vista cenital con algo de perspectiva (techo + cara frontal), animadas al trabajar (4 fotogramas), y NO se giran: la salida es una rampa aparte que gira. Javi quiere que parezcan máquinas de fábrica de verdad, no cajas con icono.
 - Estilo visual propio "trastos remendados": redondeado (no pixel art), contorno marrón oscuro, pastel sobre el verde del planeta, parches atornillados. Inspirarse en packs de itch.io pero sin copiar su aspecto ni los recursos típicos de Factorio (nada de carbón/hierro/cobre).
 - Interfaz táctil: barra rápida abajo + catálogo que se despliega desde la derecha. La orientación (vertical/horizontal) no está decidida: el diseño tiene que aguantar ambas.
 - Un jugador primero. El multijugador colaborativo vendrá después (WebSockets).
