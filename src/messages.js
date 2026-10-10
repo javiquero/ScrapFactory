@@ -18,6 +18,7 @@ export const TIPS = [
   'Pon un extractor encima de un vertedero de chatarra y lleva lo que saque con cintas hasta tu nave. Entra por cualquier lado.',
   'Arrastra el dedo con la cinta elegida para trazar el recorrido de una vez. Con dos dedos mueves el mapa.',
   'Con Quitar puedes arrastrar para borrar un área entera. Y si te arrepientes, Deshacer.',
+  '¿Dos cintas que se cruzan? Compra el puente: al trazar una cinta por encima de otra, se pone solo.',
   'Solo pagamos lo que pide el pedido. Lo demás nos lo quedamos igual, por si acaso. Gratis.',
   'Con los créditos compras máquinas nuevas y mejoras en el catálogo (botón Más).',
   'Recordatorio: el casco de la empresa es solo decorativo. No lo uses si cae algo.',

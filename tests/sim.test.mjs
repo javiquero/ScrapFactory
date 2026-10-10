@@ -507,4 +507,36 @@ for (const lvl of [1, 2, 3]) {
   console.log('✓ deshacer: colocar, sustituir, girar y borrar por área');
 }
 
+// 23) Puente: dos líneas que se cruzan sin mezclarse; y trazar una cinta encima pone el puente solo
+{
+  const s = createGame(70);
+  own(s, 'puente');
+  const X = 20, Y = 20;
+  for (let x = X - 4; x <= X + 6; x++) for (let y = Y - 4; y <= Y + 6; y++) { delete s.world.nodes[key(x, y)]; delete s.entities[key(x, y)]; }
+  // línea horizontal de chatarra hacia la derecha
+  s.world.nodes[key(X - 3, Y)] = 'chatarra';
+  applyAction(s, { type: 'place', kind: 'extractor', x: X - 3, y: Y, dir: 0 });
+  const h = []; for (let x = X - 2; x <= X + 3; x++) h.push({ x, y: Y, dir: 0 });
+  applyAction(s, { type: 'placeMany', kind: 'cinta', cells: h });
+  // línea vertical hacia abajo que la cruza en (X, Y): se pone el puente solo
+  const v = []; for (let y = Y - 2; y <= Y + 3; y++) v.push({ x: X, y, dir: 1 });
+  applyAction(s, { type: 'placeMany', kind: 'cinta', cells: v });
+  assert.equal(s.entities[key(X, Y)].kind, 'puente', 'puente automático en el cruce');
+  assert.equal(s.entities[key(X + 1, Y)].dir, 0, 'la cinta horizontal sigue igual');
+  // la horizontal acaba en la nave; por la vertical metemos placas a mano y las recogemos al final
+  s.ship = { x: X + 4, y: Y - 1 };
+  const outV = [];
+  delete s.entities[key(X, Y + 3)];
+  for (let i = 0; i < 20 * TICK_RATE; i++) {
+    if (i % 12 === 0) tryInsert(s, X, Y - 2, 'placa', 1);
+    const e = s.entities[key(X, Y + 2)];
+    if (e && e.items.length && e.items[0].p >= 1 - 1e-6) outV.push(e.items.shift().type);
+    step(s);
+  }
+  assert.ok((s.delivered.chatarra || 0) > 20, 'la chatarra cruza por debajo: ' + s.delivered.chatarra);
+  assert.ok(outV.length > 20 && outV.every((t) => t === 'placa'), 'las placas cruzan por encima sin mezclarse: ' + outV.length);
+  assert.ok(!s.delivered.placa, 'ninguna placa se cuela en la línea de chatarra');
+  console.log('✓ puente: cruzan', s.delivered.chatarra, 'chatarra por debajo y', outV.length, 'placas por encima');
+}
+
 console.log('Todo OK');

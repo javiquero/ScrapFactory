@@ -30,6 +30,13 @@ export function tryInsert(state, x, y, type, dir) {
       e.items.push({ type, p: 0, from: fromSide });
       return true;
     }
+    case 'puente': {
+      // dos carriles: horizontal (por debajo) y vertical (por encima)
+      const lane = dir % 2;
+      if (e.lanes[lane]) return false;
+      e.lanes[lane] = { type, p: 0, dir };
+      return true;
+    }
     case 'divisor':
       if (e.item || dir !== e.dir) return false;
       e.item = { type, p: 0, from: fromSide };
@@ -129,6 +136,16 @@ export function step(state) {
         for (let i = 0; i < items.length; i++) {
           const lim = i === 0 ? 1 : items[i - 1].p - BELT_SPACING;
           if (items[i].p < lim) items[i].p = Math.min(lim, items[i].p + spd);
+        }
+        break;
+      }
+      case 'puente': {
+        const spd = beltSpeed(state.levels.cinta) * 2 * DT;
+        for (let l = 0; l < 2; l++) {
+          const it = e.lanes[l];
+          if (!it) continue;
+          it.p = Math.min(1, it.p + spd);
+          if (it.p >= 1 && tryInsert(state, e.x + DX[it.dir], e.y + DY[it.dir], it.type, it.dir)) e.lanes[l] = null;
         }
         break;
       }

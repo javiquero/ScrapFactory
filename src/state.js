@@ -65,6 +65,7 @@ function addEntity(state, kind, x, y, dir) {
   if (kind === 'cinta') e.items = [];      // de delante (p alto) a detrás
   if (kind === 'divisor') e.item = null;
   if (kind === 'divisor') e.rr = 0;
+  if (kind === 'puente') e.lanes = [null, null]; // [por debajo (horizontal), por encima (vertical)]
   if (kind === 'extractor') { e.timer = 0; e.out = []; }
   if (BUILDINGS[kind]?.recipe) { e.inv = {}; e.out = []; e.timer = 0; e.busy = false; }
   state.entities[key(x, y)] = e;
@@ -76,7 +77,7 @@ export function inBounds(x, y) {
 }
 
 // Lo que se puede pisar con otro edificio (se sustituye)
-export const replaceable = (e) => e.kind === 'cinta' || e.kind === 'divisor';
+export const replaceable = (e) => e.kind === 'cinta' || e.kind === 'divisor' || e.kind === 'puente';
 
 // Comprueba si se puede colocar algo; devuelve null si sí, o el motivo si no.
 export function canPlace(state, kind, x, y) {
@@ -134,7 +135,18 @@ function apply(state, action) {
     case 'place': return placeOne(state, action.kind, action.x, action.y, action.dir);
     case 'placeMany': {
       let placed = 0;
-      for (const c of action.cells) if (placeOne(state, action.kind, c.x, c.y, c.dir).ok) placed++;
+      const cs = action.cells;
+      for (let i = 0; i < cs.length; i++) {
+        const c = cs[i];
+        // Cinta que atraviesa otra en perpendicular, en línea recta: se pone un puente
+        if (action.kind === 'cinta' && i > 0 && i < cs.length - 1 && crossing(state, c, cs[i - 1])) {
+          if (placeOne(state, 'puente', c.x, c.y, 0).ok) placed++;
+          continue;
+        }
+        // por encima de un puente, la cinta sigue su camino sin tocarlo
+        if (action.kind === 'cinta' && state.entities[key(c.x, c.y)]?.kind === 'puente') continue;
+        if (placeOne(state, action.kind, c.x, c.y, c.dir).ok) placed++;
+      }
       return placed ? { ok: true, placed } : { ok: false, reason: 'Nada que colocar' };
     }
     case 'remove': {
@@ -217,6 +229,13 @@ function apply(state, action) {
     default:
       return { ok: false, reason: 'Acción desconocida' };
   }
+}
+
+// ¿La cinta nueva cruza en recto una cinta que va en perpendicular (y hay puentes)?
+function crossing(state, c, prev) {
+  if (!state.unlocked.includes('puente')) return false;
+  const e = state.entities[key(c.x, c.y)];
+  return !!e && e.kind === 'cinta' && prev.dir === c.dir && e.dir % 2 !== c.dir % 2;
 }
 
 function placeOne(state, kind, x, y, dir) {

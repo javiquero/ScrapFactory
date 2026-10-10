@@ -1,7 +1,7 @@
 // Pintado con PixiJS. Solo LEE el estado; nunca lo modifica.
 
 import { Container, Graphics, Rectangle, Sprite, Texture, TilingSprite } from '../vendor/pixi.min.mjs';
-import { planetAt, TILE, MAP_W, MAP_H, DX, DY, DT, BELT_SPACING, LEVEL_MULT, beltSpeed } from './defs.js';
+import { planetAt, TILE, MAP_W, MAP_H, DX, DY, DT, BELT_SPACING, LEVEL_MULT, beltSpeed, opposite } from './defs.js';
 import { rng, key } from './world.js';
 import { beltShape, itemPos } from './beltShapes.js';
 import { UPRIGHT, HAS_CHUTE } from './sprites/machines.js';
@@ -226,8 +226,8 @@ export class Renderer {
         // hacia arriba la rampa quedaría en medio de la máquina: se sube por encima
         s.chute.y = e.dir === 3 ? -TOP + 8 : 0;
       }
-      if (!upright) s.rotation = (e.dir * Math.PI) / 2;
-      if (e.kind === 'cinta' || e.kind === 'divisor') this.carriers.push([e, s, e.kind === 'cinta' ? beltShape(state, e) : null]);
+      if (!upright) s.rotation = e.kind === 'puente' ? 0 : (e.dir * Math.PI) / 2; // el puente no se gira: sirve en las dos direcciones
+      if (e.kind === 'cinta' || e.kind === 'divisor' || e.kind === 'puente') this.carriers.push([e, s, e.kind === 'cinta' ? beltShape(state, e) : null]);
       else this.machines.push([e, s]);
     }
     for (const [id, s] of this.sprites) {
@@ -272,6 +272,16 @@ export class Renderer {
           const p = Math.min(lim, it.p + ahead);
           lim = p - BELT_SPACING;
           const [x, y] = itemPos(cx, cy, HALF, it.from, e.dir, p);
+          put(it.type, x, y);
+        }
+      } else if (e.lanes) {
+        // puente: lo de abajo se esconde al pasar bajo el tablero
+        for (let l = 0; l < 2; l++) {
+          const it = e.lanes[l];
+          if (!it) continue;
+          const p = Math.min(1, it.p + ahead * 2);
+          if (l === 0 && p > 0.3 && p < 0.7) continue;
+          const [x, y] = itemPos(cx, cy, HALF, opposite(it.dir), it.dir, p);
           put(it.type, x, y);
         }
       } else if (e.item) {

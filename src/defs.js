@@ -63,6 +63,8 @@ export const BUILDINGS = {
     desc: 'Mueve cosas. Arrastra el dedo para trazar el recorrido.' },
   divisor: { name: 'Divisor', short: 'Divisor', category: 'logistica', price: 80,
     desc: 'Reparte lo que entra por detrás entre izquierda, frente y derecha.' },
+  puente: { name: 'Puente', short: 'Puente', category: 'logistica', price: 60,
+    desc: 'Cruza dos cintas: una pasa por encima de la otra. Lo que entra por un lado sale por el de enfrente.' },
   extractor: { name: 'Extractor', short: 'Extraer', category: 'extraccion', price: 0, onNode: true,
     desc: 'Se coloca sobre un recurso del suelo y lo va sacando.' },
 
@@ -134,7 +136,7 @@ export const PLANETS = [
     nick: 'El Vertedero',
     resources: ['chatarra'],
     ground: 0x8cc56a,
-    shop: ['cinta', 'extractor', 'divisor', 'prensa', 'trefiladora', 'ensambladora', 'cortadora', 'bobinadora', 'montadora', 'soldadora', 'motorera', 'robotica'],
+    shop: ['cinta', 'extractor', 'divisor', 'puente', 'prensa', 'trefiladora', 'ensambladora', 'cortadora', 'bobinadora', 'montadora', 'soldadora', 'motorera', 'robotica'],
     orders: [
       { item: 'chatarra', amount: 40, pay: 60 },
       { item: 'placa', amount: 40, pay: 120 },

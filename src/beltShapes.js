@@ -5,9 +5,15 @@ import { BUILDINGS, DX, DY, opposite } from './defs.js';
 import { key } from './world.js';
 
 // ¿El vecino `n` empuja cosas en la dirección `toward` (hacia nuestra casilla)?
-export function feedsInto(n, toward) {
+export function feedsInto(n, toward, state = null, depth = 0) {
   if (!n) return false;
   switch (n.kind) {
+    case 'puente': {
+      // saca hacia `toward` lo que le entra por el lado contrario
+      if (!state || depth > 6) return false;
+      const back = state.entities[key(n.x - DX[toward], n.y - DY[toward])];
+      return feedsInto(back, toward, state, depth + 1);
+    }
     case 'cinta':
     case 'extractor':
       return n.dir === toward;
@@ -25,7 +31,7 @@ export function beltShape(state, e) {
   for (let s = 0; s < 4; s++) {
     if (s === e.dir) continue;
     const n = state.entities[key(e.x + DX[s], e.y + DY[s])];
-    if (!feedsInto(n, opposite(s))) continue;
+    if (!feedsInto(n, opposite(s), state)) continue;
     const rel = (s - e.dir + 4) % 4; // 1 = derecha, 2 = detrás, 3 = izquierda
     if (rel === 2) back = true;
     else if (rel === 3) left = true;

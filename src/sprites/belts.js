@@ -95,6 +95,26 @@ export function makeBelts(renderer, t) {
   }
   for (let f = 0; f < 4; f++) t['belt' + f] = t[`belt1_${f}`]; // nombres antiguos
 
+  // Puente: cinta horizontal por debajo y un tablero con otra cinta (vertical) por encima
+  t.puente = tex(renderer, (g, s) => {
+    straight(g, 1, 0);
+    // sombra del tablero sobre la cinta de abajo
+    s.rect(14, 0, 40, T).fill({ color: C.SHADOW, alpha: 0.55 });
+    // pilares a los lados
+    for (const y of [4, T - 14]) for (const x of [10, T - 20]) {
+      g.roundRect(x, y, 10, 10, 3).fill(grad([[0, C.METAL_L], [1, C.METAL_D]], 0, 0, 1, 1)).stroke({ width: 1.6, color: C.INK });
+    }
+    // tablero con su banda
+    g.roundRect(12, -2, 40, T + 4, 4).fill(grad([[0, C.BUTTER_L], [0.5, C.BUTTER], [1, C.BUTTER_D]], 0, 0, 1, 0)).stroke({ width: 2.2, color: C.INK });
+    g.rect(18, -2, 28, T + 4).fill(grad([[0, C.BELT_D], [0.3, C.BELT], [0.7, C.BELT], [1, C.BELT_D]], 0, 0, 1, 0));
+    for (let y = 2; y < T; y += SLAT) {
+      g.roundRect(20, y, 24, 6, 3).fill(C.BELT_L);
+    }
+    for (const x of [18, 46]) g.moveTo(x, 0).lineTo(x, T).stroke({ width: 1.6, color: C.INK });
+    // remaches del tablero
+    for (const y of [10, 32, 54]) { g.circle(15, y, 1.5).fill(C.BUTTER_D); g.circle(49, y, 1.5).fill(C.BUTTER_D); }
+  }, T, T, 4);
+
   t.divisor = tex(renderer, (g) => {
     g.roundRect(6, 10, 52, 52, 16).fill({ color: C.SHADOW, alpha: 0.22 });
     g.roundRect(6, 6, 52, 52, 16).fill(C.BELT).stroke({ width: 3, color: C.INK });
