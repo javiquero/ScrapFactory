@@ -1,7 +1,7 @@
 // Pintado con PixiJS. Solo LEE el estado; nunca lo modifica.
 
 import { Container, Graphics, Rectangle, Sprite, Texture, TilingSprite } from '../vendor/pixi.min.mjs';
-import { planetAt, TILE, MAP_W, MAP_H, DX, DY, DT, BELT_SPACING, LEVEL_MULT, beltSpeed, opposite } from './defs.js';
+import { planetAt, lookAt, TILE, MAP_W, MAP_H, DX, DY, DT, BELT_SPACING, LEVEL_MULT, beltSpeed, opposite } from './defs.js';
 import { rng, key } from './world.js';
 import { beltShape, itemPos } from './beltShapes.js';
 import { UPRIGHT, HAS_CHUTE } from './sprites/machines.js';
@@ -83,15 +83,17 @@ export class Renderer {
     const circle = (x, y, r, fill) => each(x - r, y - r, x + r, y + r, (g) => g.circle(x, y, r).fill(fill));
 
     // hierba: verde de base con manchas grandes y suaves de otros tonos
+    const look = lookAt(state.planet || 0);
+    this.app.renderer.background.color = planetAt(state.planet || 0).ground;
     gfx.forEach((g) => g.rect(0, 0, W, H).fill(planetAt(state.planet || 0).ground));
     for (let i = 0; i < MAP_W * MAP_H * 0.08; i++) {
       const x = rand() * W, y = rand() * H, r = 50 + rand() * 140;
-      circle(x, y, r, { color: rand() < 0.5 ? 0x9bd078 : 0x7fb95e, alpha: 0.22 });
+      circle(x, y, r, { color: rand() < 0.5 ? look.light : look.dark, alpha: 0.22 });
     }
     for (let i = 0; i < MAP_W * MAP_H * 0.9; i++) {
       const x = rand() * W, y = rand() * H, h = 5 + rand() * 5;
       each(x - 5, y - h, x + 5, y, (g) => g.moveTo(x - 3, y).lineTo(x - 4, y - h * 0.7).moveTo(x, y).lineTo(x + 0.5, y - h).moveTo(x + 3, y).lineTo(x + 4, y - h * 0.7)
-        .stroke({ width: 1.6, color: 0x5d9a45, alpha: 0.5, cap: 'round' }));
+        .stroke({ width: 1.6, color: look.grass, alpha: 0.5, cap: 'round' }));
     }
 
     // vertederos: tierra continua con borde irregular
@@ -105,14 +107,14 @@ export class Renderer {
       }
     }
     const tone = (type, i) => (NODE_GROUND[type] || NODE_GROUND.chatarra)[i];
-    for (const [x, y, r] of blobs) circle(x, y, r + 4, { color: 0x6f8f45, alpha: 0.55 }); // hierba pisada
+    for (const [x, y, r] of blobs) circle(x, y, r + 4, { color: look.dark, alpha: 0.55 }); // suelo pisado
     for (const [x, y, r, type] of blobs) circle(x, y, r + 1.5, tone(type, 0));
     for (const [x, y, r, type] of blobs) circle(x, y, r - 1, tone(type, 1));
     for (const [x, y, type] of nodes) {
       for (let k = 0; k < 3; k++) circle(x * T + rand() * T, y * T + rand() * T, 8 + rand() * 10, { color: tone(type, 2), alpha: 0.35 });
       for (let k = 0; k < 5; k++) circle(x * T + rand() * T, y * T + rand() * T, 1.5 + rand() * 2, { color: tone(type, 3), alpha: 0.8 });
     }
-    gfx.forEach((g) => g.rect(0, 0, W, H).stroke({ width: 10, color: 0x2f5a2a, alpha: 0.35 }));
+    gfx.forEach((g) => g.rect(0, 0, W, H).stroke({ width: 10, color: look.edge, alpha: 0.35 }));
 
     // hornear cada trozo y montar su contenedor (suelo + piezas sueltas encima)
     this.chunks = [];
@@ -157,6 +159,7 @@ export class Renderer {
       sp.anchor.set(0.5);
       sp.position.set(d.x * T + HALF, d.y * T + HALF);
       sp.label = key(d.x, d.y);
+      sp.tint = look.tint; // la vegetación cambia de color según el planeta
       if (TALL_DECOR.includes(d.kind)) { sp.isDecor = true; sp.zIndex = d.y * T + HALF; this.tallLayer.addChild(sp); }
       else { chunkAt(sp.x, sp.y).addChild(sp); this.flatDecor.push(sp); }
     }

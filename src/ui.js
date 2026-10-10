@@ -314,10 +314,6 @@ export function rateText(kind, state) {
   const lv = state.levels || {};
   switch (kind) {
     case 'cinta': return `Nivel ${lv.cinta} · hasta ${num(beltRate(lv.cinta))} objetos/s`;
-    case 'puente': {
-      const l = e.lanes.map((it) => (it ? n(it.type) : 'nada'));
-      return `Por debajo: ${l[0]} · por encima: ${l[1]}`;
-    }
     case 'divisor': return `Tan rápido como las cintas (${num(beltRate(lv.cinta))}/s)`;
     case 'puente': return `Se pone solo al cruzar una cinta con otra. Tan rápido como las cintas (${num(beltRate(lv.cinta))}/s)`;
     case 'extractor': return `Nivel ${lv.extractor} · ${num(extractorRate(lv.extractor))} por segundo de lo que tenga debajo`;
@@ -336,6 +332,10 @@ function describe(e, state) {
   switch (e.kind) {
     case 'cinta':
       return `${rateText('cinta', state)} · lleva ${e.items.length}`;
+    case 'puente': {
+      const l = e.lanes.map((it) => (it ? n(it.type) : 'nada'));
+      return `Por debajo: ${l[0]} · por encima: ${l[1]}`;
+    }
     case 'divisor':
       return e.item ? `Lleva: ${n(e.item.type)}` : 'Vacío';
     case 'extractor': {

@@ -2,9 +2,9 @@
 import assert from 'node:assert/strict';
 import { createGame, applyAction, serialize, deserialize, currentOrder, isShip } from '../src/state.js';
 import { step, tryInsert } from '../src/sim.js';
-import { isStuck, rescueCount } from '../src/rescue.js';
+import { isStuck, rescueCount, machinesFor } from '../src/rescue.js';
 import { key } from '../src/world.js';
-import { TICK_RATE, beltRate, extractorRate, PLANETS, BUILDINGS, ITEMS, LEVEL_MULT, upgradeCost } from '../src/defs.js';
+import { TICK_RATE, beltRate, extractorRate, PLANETS, BUILDINGS, ITEMS, NODES, LEVEL_MULT, upgradeCost, shopAt } from '../src/defs.js';
 import { beltShape } from '../src/beltShapes.js';
 
 const run = (state, seconds) => { for (let i = 0; i < seconds * TICK_RATE; i++) step(state); };
@@ -561,6 +561,64 @@ for (const lvl of [1, 2, 3]) {
   run(s, 20);
   assert.ok((s.delivered.chatarra || 0) > 30, 'cruza tres cintas seguidas: ' + s.delivered.chatarra);
   console.log('✓ puentes encadenados: cruza 3 cintas y entrega', s.delivered.chatarra);
+}
+
+// 25) Todos los planetas: cada pedido se puede fabricar allí, con máquinas a la venta,
+// y ganando solo con los pedidos de ESE planeta (empezando sin un crédito) nunca falta dinero
+{
+  const raw = (item, acc = new Set()) => {
+    if (Object.values(NODES).some((n) => n.item === item)) { acc.add(item); return acc; }
+    const m = Object.keys(BUILDINGS).find((k) => BUILDINGS[k].recipe?.out === item);
+    for (const t in BUILDINGS[m].recipe.in) raw(t, acc);
+    return acc;
+  };
+  const owned = new Set(['cinta', 'extractor']);
+  PLANETS.forEach((pl, p) => {
+    let money = 0;
+    for (const o of pl.orders) {
+      for (const r of raw(o.item)) assert.ok(pl.resources.includes(r), `planeta ${p + 1}: ${o.item} necesita ${r}, que no hay`);
+      for (const m of machinesFor(o.item)) {
+        assert.ok(shopAt(p).includes(m), `planeta ${p + 1}: ${m} no se vende`);
+        if (!owned.has(m)) { money -= BUILDINGS[m].price; owned.add(m); }
+      }
+      assert.ok(money >= 0, `planeta ${p + 1}: al pedido de ${o.item} le faltan ${-money} ₡`);
+      money += o.amount * ITEMS[o.item].value + o.pay;
+    }
+    // las máquinas nuevas del planeta se usan en algún pedido
+    for (const m of pl.shop) if (BUILDINGS[m].recipe) assert.ok(owned.has(m), `planeta ${p + 1}: ${m} no la pide ningún pedido`);
+  });
+  console.log('✓ los', PLANETS.length, 'planetas: pedidos fabricables y economía sin atascos');
+}
+
+// 26) Las cadenas nuevas producen (cada máquina final, alimentada a mano, saca su producto)
+{
+  for (const k of ['patinetera', 'consolera', 'dronera', 'androidera', 'aerodeslizadores', 'criogenia']) {
+    const s = createGame(80);
+    own(s, k);
+    const X = 12, Y = 12;
+    for (let x = X - 1; x <= X + 3; x++) for (let y = Y - 1; y <= Y + 2; y++) { delete s.world.nodes[key(x, y)]; delete s.entities[key(x, y)]; }
+    assert.ok(applyAction(s, { type: 'place', kind: k, x: X, y: Y, dir: 0 }).ok, k);
+    shipAt(s, X + 1, Y);
+    const r = BUILDINGS[k].recipe;
+    for (let i = 0; i < 10 * TICK_RATE; i++) { if (i % 10 === 0) s.entities[key(X, Y)].inv = Object.fromEntries(Object.keys(r.in).map((t) => [t, 10])); step(s); }
+    const got = s.delivered[r.out] || 0;
+    assert.ok(got >= 5, `${k} saca ${r.out}: ${got}`);
+  }
+  console.log('✓ las 6 máquinas finales nuevas producen');
+}
+
+// 27) Viaje completo: del planeta 1 al 8, cada salto trae su recurso nuevo
+{
+  const s = createGame(90);
+  for (let p = 0; p < PLANETS.length - 1; p++) {
+    s.planetDone = true;
+    assert.ok(applyAction(s, { type: 'nextPlanet' }).ok, 'despega al ' + (p + 2));
+    const types = new Set(Object.values(s.world.nodes));
+    const nuevo = PLANETS[p + 1].resources.at(-1);
+    assert.ok(types.has(nuevo), `planeta ${p + 2} tiene ${nuevo}`);
+  }
+  assert.equal(s.planet, PLANETS.length - 1);
+  console.log('✓ viaje del planeta 1 al', PLANETS.length, 'con un recurso nuevo en cada uno');
 }
 
 console.log('Todo OK');

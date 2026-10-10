@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Muestrario de sprites 2</title>
+  <style>
+    body { margin: 0; background: #8cc56a; font-family: system-ui, sans-serif; }
+    p { margin: 8px 12px; color: #1f3b26; }
+  </style>
+</head>
+<body>
+  <p>Muestrario de los sprites nuevos (items2.js y terrain2.js). Las piezas de suelo salen sobre su mancha de tierra. <code>?scale=2&amp;filter=^item_&amp;cols=6</code></p>
+  <script type="module">
+    import { Application, Sprite, Text, Container, Graphics } from '../vendor/pixi.min.mjs';
+    import { tex } from '../src/sprites/common.js';
+    import { ITEM_DRAW2 } from '../src/sprites/items2.js';
+    import { makeTerrain2, NODE_PIECES2, NODE_GROUND2 } from '../src/sprites/terrain2.js';
+
+    const params = new URLSearchParams(location.search);
+    const scale = Number(params.get('scale') || 2);
+    const filter = params.get('filter') || '';
+    const cols = Number(params.get('cols') || 6);
+
+    const app = new Application();
+    await app.init({ width: cols * 96 * scale / 1.4, height: 400, background: '#8cc56a', antialias: true, resolution: 1 });
+    document.body.appendChild(app.canvas);
+
+    const t = {};
+    for (const [k, draw] of Object.entries(ITEM_DRAW2)) t['item_' + k] = tex(app.renderer, draw, 32, 32, 1.5);
+    makeTerrain2(app.renderer, t);
+    // tipo de nodo de cada pieza, para pintar su tierra detrás
+    const groundOf = {};
+    for (const [type, keys] of Object.entries(NODE_PIECES2)) for (const k of keys) groundOf[k] = NODE_GROUND2[type];
+
+    const re = new RegExp(filter); // admite expresiones: ?filter=^(rub|ice)_
+    const keys = Object.keys(t).filter((k) => re.test(k));
+    const cell = 96 * scale / 1.4;
+    keys.forEach((k, i) => {
+      const c = new Container();
+      c.x = (i % cols) * cell + 8;
+      c.y = Math.floor(i / cols) * (cell + 18) + 8;
+      const w = t[k].width * scale, h = t[k].height * scale;
+      const gr = groundOf[k];
+      if (gr) {
+        const bg = new Graphics();
+        bg.ellipse(w / 2, h / 2, w / 2 + 1.5, h / 2 + 1.5).fill(gr[0]);
+        bg.ellipse(w / 2, h / 2, w / 2 - 1, h / 2 - 1).fill(gr[1]);
+        bg.circle(w * 0.3, h * 0.35, w * 0.18).fill({ color: gr[2], alpha: 0.35 });
+        for (const [fx, fy] of [[0.2, 0.7], [0.75, 0.25], [0.8, 0.75]]) bg.circle(w * fx, h * fy, 2 * scale).fill({ color: gr[3], alpha: 0.8 });
+        c.addChild(bg);
+      }
+      const s = new Sprite(t[k]);
+      s.scale.set(scale);
+      c.addChild(s);
+      const label = new Text({ text: k, style: { fontSize: 12, fill: 0x1f3b26 } });
+      label.y = h + 2;
+      c.addChild(label);
+      app.stage.addChild(c);
+    });
+    app.renderer.resize(app.screen.width, Math.ceil(keys.length / cols) * (cell + 18) + 24);
+    window.__ready = true;
+  </script>
+</body>
+</html>

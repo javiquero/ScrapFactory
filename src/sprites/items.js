@@ -2,6 +2,7 @@
 
 import { ITEMS } from '../defs.js';
 import { placeArt } from './art.js';
+import { ITEM_DRAW2 } from './items2.js';
 import { C, tex, grad, vgrad, rgrad, rivet, line, rustStain } from './common.js';
 
 const { INK, SHADOW } = C;
@@ -164,6 +165,6 @@ export function makeItems(renderer, t, art = {}) {
     const png = art['item_' + type];
     t['item_' + type] = png
       ? tex(renderer, (g, s, mid) => { s.ellipse(16, 25, 10, 4).fill({ color: SHADOW, alpha: 0.4 }); placeArt(mid, png, { cx: 16, bottom: 27, w: 27, h: 24 }); }, 32, 32, 1.5)
-      : tex(renderer, DRAW[type], 32, 32, 1.5);
+      : tex(renderer, DRAW[type] || ITEM_DRAW2[type], 32, 32, 1.5);
   }
 }

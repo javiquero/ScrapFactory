@@ -6,44 +6,15 @@
 
 import { placeArt } from './art.js';
 import { C, T, TALL, TOP, tex, grad, vgrad, hgrad, cyl, rgrad, rivet, line, block, hazard, rustStain } from './common.js';
+import { Y, beam, column, lift, bolt } from './parts.js';
+import { BUILDINGS } from '../defs.js';
+import { DRAW2 } from './machines2.js';
 
 const { INK, SHADOW } = C;
 
-export const UPRIGHT = [
-  'extractor', 'prensa', 'trefiladora', 'ensambladora', 'cortadora', 'bobinadora', 'montadora',
-  'soldadora', 'motorera', 'robotica', 'horno', 'cristaleria', 'montasolar',
-];
+// Máquinas: el extractor y todo lo que tenga receta (se dibujan derechas, con rampa de salida)
+export const UPRIGHT = ['extractor', ...Object.keys(BUILDINGS).filter((k) => BUILDINGS[k].recipe)];
 export const HAS_CHUTE = UPRIGHT;
-
-const Y = (y) => TOP + y; // coordenada dentro de la casilla → coordenada en la textura
-
-// Viga con contorno (patas, brazos)
-function beam(g, x1, y1, x2, y2, w, color, light) {
-  line(g, x1, y1, x2, y2, w + 3, INK);
-  line(g, x1, y1, x2, y2, w, color);
-  if (light) line(g, x1 - w * 0.2, y1, x2 - w * 0.2, y2, Math.max(1, w * 0.3), light, 0.8);
-}
-
-// Cilindro vertical (columna, eje) con brillo
-function column(g, x, y, w, h, dark, mid, light) {
-  g.roundRect(x, y, w, h, w * 0.3).fill(cyl(dark, mid, light, false)).stroke({ width: 2, color: INK });
-}
-
-// ---------------------------------------------------------------------------
-// Vista en PLANTA (desde arriba del todo), igual que las cintas: cada máquina
-// ocupa su casilla de borde a borde para que las cintas lleguen hasta ella.
-// La altura se insinúa solo con sombras y brillos.
-// ---------------------------------------------------------------------------
-
-// Sombra de algo que está levantado del suelo
-const lift = (s, x, y, w, h, r, d = 4) => s.roundRect(x + d * 0.6, y + d, w, h, r).fill({ color: SHADOW, alpha: 0.45 });
-
-// Tornillo hexagonal visto desde arriba
-function bolt(g, x, y, r = 2.6) {
-  const pts = [];
-  for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2; pts.push(x + Math.cos(a) * r, y + Math.sin(a) * r); }
-  g.poly(pts).fill(rgrad(C.METAL_L, C.METAL_D, 0.35, 0.3)).stroke({ width: 1, color: INK });
-}
 
 // ---------------------------------------------------------------------------
 // EXTRACTOR: armazón de vigas sobre el montón, con la broca girando en el centro
@@ -581,6 +552,13 @@ function nave(g, s, f) {
   if (f < 2) g.circle(108, 92, 6).fill({ color: 0xff7a7a, alpha: 0.3 });
 }
 
+// Por si falta el dibujo de alguna máquina: caja con interrogante (no debería verse)
+function placeholder(g, s) {
+  lift(s, 4, Y(4), 56, 56, 8, 4);
+  g.roundRect(4, Y(4), 56, 56, 8).fill(C.METAL_D).stroke({ width: 2, color: INK });
+  g.circle(32, Y(32), 10).fill(C.BUTTER).stroke({ width: 2, color: INK });
+}
+
 // Rampa de salida: se dibuja hacia la derecha en una casilla de 64 y el juego la gira
 function chute(g, s) {
   s.roundRect(50, 26, 14, 16, 3).fill({ color: SHADOW, alpha: 0.35 });
@@ -622,12 +600,12 @@ const ART = {
 };
 
 export function makeMachines(renderer, t, art = {}) {
-  const DRAW = { extractor, prensa, trefiladora, ensambladora, cortadora, bobinadora, montadora, soldadora, motorera, robotica, horno, cristaleria, montasolar };
+  const DRAW = { extractor, prensa, trefiladora, ensambladora, cortadora, bobinadora, montadora, soldadora, motorera, robotica, horno, cristaleria, montasolar, ...DRAW2 };
   for (const kind of UPRIGHT) {
     for (let f = 0; f < 4; f++) {
       t[`${kind}_${f}`] = art[kind] && ART[kind]
         ? tex(renderer, (g, s, mid) => ART[kind](g, s, mid, f, art[kind]), T, TALL)
-        : tex(renderer, (g, s) => DRAW[kind](g, s, f), T, TALL);
+        : tex(renderer, (g, s) => (DRAW[kind] || placeholder)(g, s, f), T, TALL);
     }
     t[kind] = t[`${kind}_0`];
   }

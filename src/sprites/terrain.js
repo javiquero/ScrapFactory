@@ -3,6 +3,7 @@
 // continua y reparte encima estas piezas sueltas (junk_*), cada una a su aire.
 
 import { placeArt } from './art.js';
+import { NODE_PIECES2, NODE_GROUND2, makeTerrain2 } from './terrain2.js';
 import { C, T, tex, grad, vgrad, rgrad, cyl, rivet, line, rustStain, prng } from './common.js';
 
 const { INK, SHADOW } = C;
@@ -112,11 +113,12 @@ const CRYSTALS = {
 export const CRYSTAL_KEYS = Object.keys(CRYSTALS).map((k) => 'crys_' + k);
 
 // Piezas sueltas que se reparten por cada tipo de nodo
-export const NODE_PIECES = { chatarra: JUNK_KEYS, cristal: CRYSTAL_KEYS };
+export const NODE_PIECES = { chatarra: JUNK_KEYS, cristal: CRYSTAL_KEYS, ...NODE_PIECES2 };
 // Colores de la tierra de cada tipo de nodo: borde, relleno, claros, motas
 export const NODE_GROUND = {
   chatarra: [0x7d6a4c, 0x9b8462, 0xb9a07a, 0x5a4a35],
   cristal: [0x5f6f80, 0x8a9aab, 0xb8d8e6, 0x3f4f60],
+  ...NODE_GROUND2,
 };
 
 // ---- Decoración ----
@@ -133,6 +135,7 @@ function tree(g, s, variant) {
 const hgradTrunk = () => grad([[0, 0x6b4b2e], [0.4, 0xa07650], [1, 0x5a3e25]], 0, 0, 1, 0);
 
 export function makeTerrain(renderer, t, art = {}) {
+  makeTerrain2(renderer, t);
   for (const [k, draw] of Object.entries(CRYSTALS)) t['crys_' + k] = tex(renderer, draw, J, J, 2.5);
   for (const [k, draw] of Object.entries(JUNK)) {
     const png = art['junk_' + k];

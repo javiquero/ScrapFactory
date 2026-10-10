@@ -75,9 +75,24 @@ Regla de las máquinas básicas: **2 de recurso → 1 de producto básico**, al 
 
 15 pedidos. Mezclan lo nuevo con la cadena del planeta 1 (también piden motores y robots).
 
-## Del 3 al 10 (por hacer)
+## Planetas 3 a 8 (hechos)
 
-Mismo patrón: el producto básico nuevo se mezcla con algo de antes, y luego se junta con un producto ya complejo. Ideas: goma + engranaje → correa; chip + vidrio → placa base; placa base + robot → dron; biocombustible + carcasa → batería. El último producto del planeta 10 es la "Estatua del Director General", hecha de todo lo anterior. Cada planeta: 15 a 20 pedidos, 3 o 4 máquinas nuevas a la venta.
+Mismo patrón en todos: una máquina básica (2 de recurso → 1, 0,4 s), una de mezcla (básico + algo de antes, 0,8 s) y una final (mezcla + algo complejo de antes, 1,6 s). 16 pedidos por planeta (`laterOrders` en `src/defs.js`); el primero siempre paga al menos la máquina básica. Cada planeta tiene su color de suelo (`PLANET_LOOK`).
+
+| Planeta | Suelo | Recurso | Básica | Mezcla | Final |
+| --- | --- | --- | --- | --- | --- |
+| 3 SC-21 "La Gomera" | ocre | caucho | trituradora → goma | vulcanizadora: goma + engranaje → correa | taller de patinetes: correa + motor → patinete |
+| 4 SC-34 "Silicon Barranco" | gris violeta | circuitos viejos | desguazadora → chip | grabadora: chip + vidrio → placa base | línea de consolas: placa base + carcasa → consola retro |
+| 5 SC-55 "El Musgal" | verde azulado oscuro | musgo luminoso | fermentador → biocombustible | envasadora: biocombustible + carcasa → batería | hangar de drones: batería + motor → dron |
+| 6 SC-89 "La Ciénaga" | mostaza | lodo tóxico | destilería → ácido | grabado al ácido: ácido + chip → circuito impreso | fábrica de androides: circuito + robot → androide |
+| 7 SC-144 "Las Dunas Raras" | arena rosada | arena magnética | imantador → imán | bobinadora magnética: imán + alambre → electroimán | hangar de aerodeslizadores: electroimán + panel → aerodeslizador |
+| 8 SC-233 "El Congelador" | nieve | hielo azul | congelador → refrigerante | montadora de neveras: refrigerante + carcasa → nevera | laboratorio criogénico: nevera + circuito → criocápsula |
+
+Dibujos: máquinas en `src/sprites/machines2.js`, objetos en `items2.js`, piezas del suelo en `terrain2.js` (muestrario propio en `dev/sprites2.html`).
+
+## Planetas 9 y 10 (por hacer)
+
+Esporas (telar → fibra) y chatarrexium (forja → núcleo). El último producto será la "Estatua del Director General", hecha de todo lo anterior.
 
 ## El salto de planeta
 
