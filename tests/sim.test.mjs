@@ -2,9 +2,17 @@
 import assert from 'node:assert/strict';
 import { createGame, applyAction, serialize, deserialize, currentOrder, isShip } from '../src/state.js';
 import { step, tryInsert } from '../src/sim.js';
-import { isStuck, rescueCount, machinesFor } from '../src/rescue.js';
 import { key } from '../src/world.js';
-import { TICK_RATE, beltRate, extractorRate, PLANETS, BUILDINGS, ITEMS, NODES, LEVEL_MULT, upgradeCost, shopAt } from '../src/defs.js';
+import { TICK_RATE, beltRate, extractorRate, PLANETS, BUILDINGS, ITEMS, NODES, LEVEL_MULT, MAKER, STARTING_UNLOCKS, unlockedBy } from '../src/defs.js';
+
+// Máquinas que hacen falta para fabricar `item` (toda la cadena)
+function machinesFor(item, acc = new Set()) {
+  const m = MAKER[item];
+  if (!m) return acc;
+  acc.add(m);
+  for (const t in BUILDINGS[m].recipe.in) machinesFor(t, acc);
+  return acc;
+}
 import { beltShape } from '../src/beltShapes.js';
 
 const run = (state, seconds) => { for (let i = 0; i < seconds * TICK_RATE; i++) step(state); };
@@ -32,7 +40,7 @@ function line(state, x, y, n) {
   shipAt(state, x + n + 1, y);
 }
 
-// 1) Chatarra llega a la nave, completa el primer pedido y Chatarrex paga
+// 1) Chatarra llega a la nave, completa el primer pedido y desbloquea la prensa
 {
   const s = createGame(1234);
   const [x, y] = findNode(s, 'chatarra');
@@ -41,8 +49,7 @@ function line(state, x, y, n) {
   const need = PLANETS[0].orders[0];
   assert.ok((s.delivered.chatarra || 0) >= need.amount, 'debería entregar >= ' + need.amount + ' chatarra, entregó ' + s.delivered.chatarra);
   assert.equal(s.orderIndex, 1, 'primer pedido completado');
-  assert.equal(s.money, need.amount * ITEMS.chatarra.value + need.pay, 'cobra las piezas del pedido y el pedido; la chatarra de más no');
-  assert.ok(!s.unlocked.includes('prensa'), 'la prensa ya no se regala: se compra');
+  assert.ok(s.unlocked.includes('prensa'), 'el pedido desbloquea la prensa');
   console.log('✓ línea básica: entregadas', s.delivered.chatarra, 'chatarra');
 }
 
@@ -156,7 +163,7 @@ function throughput(nExtractors, level) {
   run(s, 40);
   return ((s.delivered.chatarra || 0) - before) / 40;
 }
-for (const lvl of [1, 2, 3]) {
+for (const lvl of [1]) {   // sin niveles de momento
   const one = throughput(1, lvl), two = throughput(2, lvl), three = throughput(3, lvl);
   const er = extractorRate(lvl), br = beltRate(lvl);
   assert.ok(Math.abs(one - er) < 0.1, `nivel ${lvl}: 1 extractor da ${one}/s, esperado ${er}`);
@@ -183,37 +190,11 @@ for (const lvl of [1, 2, 3]) {
   console.log('✓ prensa con cinta llena:', rate.toFixed(2), 'placas/s');
 }
 
-// 10) Una partida guardada en versiones anteriores se pone al día (nave fija, dinero)
+// 10) Las partidas de antes (con dinero y tienda) no se cargan: se empieza de cero
 {
-  const old = { version: 2, seed: 3, tick: 10, nextId: 4, unlocked: ['cinta', 'extractor', 'teletransportador', 'prensa'], orderIndex: 2, orderProgress: 5, delivered: {}, rev: 4,
-    levels: { cinta: 1, extractor: 2, prensa: 1, ensambladora: 1 },
-    entities: {
-      '1,1': { id: 2, kind: 'cinta', x: 1, y: 1, dir: 0, item: { type: 'chatarra', p: 0.3, from: 2 } },
-      '9,9': { id: 3, kind: 'teletransportador', x: 9, y: 9, dir: 0 },
-    } };
-  const st = deserialize(JSON.stringify(old));
-  assert.equal(st.version, 5);
-  assert.equal(st.planet, 0);
-  assert.equal(st.entities['1,1'].items.length, 1);
-  assert.equal(st.entities['9,9'], undefined, 'el teletransportador viejo desaparece');
-  assert.ok(st.ship && isShip(st, st.ship.x + 1, st.ship.y + 1), 'tiene nave');
-  assert.equal(st.levels.extractor, 2, 'conserva las mejoras');
-  assert.ok(st.unlocked.includes('prensa') && !st.unlocked.includes('teletransportador'));
-  assert.ok(st.money > 0, 'un detalle por las molestias');
-  // una del planeta 2 con las máquinas que cambiaron de nombre
-  const p2 = { version: 4, seed: 8, planet: 1, planetDone: false, tick: 0, nextId: 5, orderIndex: 3, orderProgress: 2, delivered: {}, rev: 1,
-    unlocked: ['cinta', 'extractor', 'teletransportador', 'prensa', 'horno', 'taller', 'montadora'],
-    levels: { cinta: 2, extractor: 1, prensa: 1, ensambladora: 1, horno: 1, taller: 1, montadora: 1 },
-    entities: {
-      '2,2': { id: 2, kind: 'taller', x: 2, y: 2, dir: 0, inv: {}, out: [], timer: 0, busy: false },
-      '3,2': { id: 3, kind: 'montadora', x: 3, y: 2, dir: 0, inv: {}, out: [], timer: 0, busy: false },
-    } };
-  const st2 = deserialize(JSON.stringify(p2));
-  assert.equal(st2.entities['2,2'].kind, 'cristaleria');
-  assert.equal(st2.entities['3,2'].kind, 'montasolar');
-  assert.ok(st2.unlocked.includes('montasolar') && !st2.unlocked.includes('montadora'));
-  assert.equal(st2.levels.cinta, 2);
-  console.log('✓ migración de guardado hasta v5');
+  const old = { version: 5, seed: 3, tick: 10, nextId: 3, money: 500, unlocked: ['cinta', 'extractor', 'prensa'], orderIndex: 2, orderProgress: 5, delivered: {}, rev: 4, entities: {} };
+  assert.throws(() => deserialize(JSON.stringify(old)), 'versión vieja: partida nueva');
+  console.log('✓ las partidas de antes del cambio de reglas empiezan de cero');
 }
 
 // 11) Forma de las cintas: curva al girar y unión cuando entra otra por un lado
@@ -253,16 +234,15 @@ for (const lvl of [1, 2, 3]) {
   assert.equal(applyAction(s, { type: 'nextPlanet' }).ok, false, 'no se despega antes de tiempo');
   const item = orders[orders.length - 1].item;
   own(s, 'prensa');
-  s.levels.cinta = 2;
   const sp = s.ship;
   // metemos el objeto en una cinta que apunta a la nave
   delete s.entities[key(sp.x - 1, sp.y)];
   delete s.world.nodes[key(sp.x - 1, sp.y)];
   assert.ok(applyAction(s, { type: 'place', kind: 'cinta', x: sp.x - 1, y: sp.y, dir: 0 }).ok);
   s.entities[key(sp.x - 1, sp.y)].items.push({ type: item, p: 0.9, from: 2 });
+  s.hits = Array(200).fill(s.tick); // como si llegaran a buen ritmo
   run(s, 1);
   assert.equal(s.planetDone, true, 'planeta completado');
-  const money = s.money;
   const twin = deserialize(serialize(s));
   assert.ok(applyAction(s, { type: 'nextPlanet' }).ok, 'despega');
   assert.ok(applyAction(twin, { type: 'nextPlanet' }).ok);
@@ -271,14 +251,12 @@ for (const lvl of [1, 2, 3]) {
   assert.equal(Object.keys(s.entities).length, 0, 'fábrica vacía');
   assert.ok(isShip(s, s.world.spawn.x, s.world.spawn.y), 'la nave aterriza en el planeta nuevo');
   assert.equal(s.orderIndex, 0);
-  assert.equal(s.money, money, 'el dinero viaja contigo');
-  assert.equal(s.levels.cinta, 2, 'las mejoras compradas también');
-  assert.ok(s.unlocked.includes('prensa'), 'y lo comprado');
+  assert.ok(s.unlocked.includes('prensa'), 'la maquinaria desbloqueada viaja contigo');
   const types = new Set(Object.values(s.world.nodes));
   assert.ok(types.has('cristal') && types.has('chatarra'), 'el planeta 2 tiene chatarra y cristal');
   const back = deserialize(serialize(s));
   assert.equal(JSON.stringify(back.world.nodes), JSON.stringify(s.world.nodes), 'al cargar se regenera el mismo mapa');
-  console.log('✓ despegue al planeta 2 con mapa nuevo, cristal, dinero y mejoras');
+  console.log('✓ despegue al planeta 2 con mapa nuevo, cristal y la maquinaria de antes');
 }
 
 // 14) Cadena del planeta 2: chatarra→placa, cristal→vidrio, taller→ventana, montadora→panel
@@ -305,25 +283,17 @@ for (const lvl of [1, 2, 3]) {
   console.log('✓ cadena del planeta 2: entregados', s.delivered.panel, 'paneles solares');
 }
 
-// 15) Comprar y mejorar con dinero (acciones serializables)
+// 15) Las máquinas se desbloquean cumpliendo pedidos (no se compran)
 {
   const s = createGame(31);
-  assert.equal(applyAction(s, { type: 'buy', kind: 'prensa' }).ok, false, 'sin dinero no hay prensa');
-  s.money = BUILDINGS.prensa.price;
-  assert.ok(applyAction(s, { type: 'buy', kind: 'prensa' }).ok);
-  assert.equal(s.money, 0);
-  assert.ok(s.unlocked.includes('prensa'));
-  assert.equal(applyAction(s, { type: 'buy', kind: 'prensa' }).ok, false, 'no se compra dos veces');
-  assert.equal(applyAction(s, { type: 'buy', kind: 'horno' }).ok, false, 'el horno no se vende en el planeta 1');
-  s.money = upgradeCost('cinta', 2) + upgradeCost('cinta', 3);
-  assert.ok(applyAction(s, { type: 'upgrade', kind: 'cinta' }).ok);
-  assert.ok(applyAction(s, { type: 'upgrade', kind: 'cinta' }).ok);
-  assert.equal(s.levels.cinta, 3);
-  assert.equal(s.money, 0);
-  s.money = 1e6;
-  assert.equal(applyAction(s, { type: 'upgrade', kind: 'cinta' }).ok, false, 'nivel 3 es el máximo');
-  assert.equal(applyAction(s, { type: 'upgrade', kind: 'robotica' }).ok, false, 'no se mejora lo que no tienes');
-  console.log('✓ tienda: comprar máquinas y mejoras');
+  assert.deepEqual(s.unlocked, ['cinta', 'extractor'], 'al principio solo cinta y extractor');
+  assert.equal(applyAction(s, { type: 'place', kind: 'prensa', x: 1, y: 1, dir: 0 }).ok, false, 'la prensa aún no');
+  assert.equal(applyAction(s, { type: 'buy', kind: 'prensa' }).ok, false, 'ya no hay tienda');
+  const { x, y } = s.ship;
+  for (let i = 0; i < PLANETS[0].orders[0].amount; i++) tryInsert(s, x, y, 'chatarra', 0);
+  assert.equal(s.orderIndex, 1);
+  assert.ok(s.unlocked.includes('prensa'), 'el pedido 1 da la prensa');
+  console.log('✓ desbloqueo por pedidos');
 }
 
 // 16) La nave: no se construye encima, recibe por sus 8 bocas, y no se puede quitar
@@ -347,22 +317,26 @@ for (const lvl of [1, 2, 3]) {
   console.log('✓ nave fija de 2×2 con 8 entradas');
 }
 
-// 16b) Solo se paga lo que pide el pedido
+// 16b) Pedidos con ritmo mínimo: lo que llega más despacio no cuenta
 {
   const s = createGame(78);
+  s.orderIndex = 2; // chatarra con ritmo mínimo (dos extractores)
+  const o = currentOrder(s);
+  assert.equal(o.item, 'chatarra');
+  assert.ok(o.rate > extractorRate(), 'pide más de lo que da un extractor');
   const { x, y } = s.ship;
-  delete s.world.nodes[key(x - 1, y)];
-  applyAction(s, { type: 'place', kind: 'cinta', x: x - 1, y, dir: 0 });
-  assert.equal(currentOrder(s).item, 'chatarra');
-  s.entities[key(x - 1, y)].items.push({ type: 'placa', p: 0.95, from: 2 });
-  run(s, 0.3);
-  assert.equal(s.delivered.placa, 1, 'la nave lo acepta');
-  assert.equal(s.money, 0, 'pero no lo paga');
-  assert.equal(s.orderProgress, 0, 'ni cuenta para el pedido');
-  s.entities[key(x - 1, y)].items.push({ type: 'chatarra', p: 0.95, from: 2 });
-  run(s, 0.3);
-  assert.equal(s.money, ITEMS.chatarra.value, 'lo del pedido sí se paga');
-  console.log('✓ solo se paga lo del pedido');
+  // a 2,5/s (un extractor) no cuenta
+  for (let i = 0; i < 20 * TICK_RATE; i++) { if (i % 12 === 0) tryInsert(s, x, y, 'chatarra', 0); step(s); }
+  assert.equal(s.orderProgress, 0, 'a ritmo de una línea no cuenta');
+  assert.ok(s.events.some((e) => e.type === 'tooSlow'), 'Chatarrex avisa de que va lento');
+  // a 6/s sí
+  for (let i = 0; i < 20 * TICK_RATE; i++) { if (i % 5 === 0) tryInsert(s, x, y, 'chatarra', 0); step(s); }
+  assert.ok(s.orderProgress > 60, 'a buen ritmo cuenta: ' + s.orderProgress);
+  // y lo que no es del pedido nunca cuenta
+  const before = s.orderProgress;
+  tryInsert(s, x, y, 'placa', 0);
+  assert.equal(s.orderProgress, before);
+  console.log('✓ ritmo mínimo: a 2,5/s no cuenta, a 6/s sí');
 }
 
 // 17) Cadena larga del planeta 1: chatarra → alambre/placa → muelle/tornillos/engranaje → mecanismo → motor; + carcasa → robot
@@ -405,75 +379,6 @@ for (const lvl of [1, 2, 3]) {
   console.log('✓ ritmos cuadrados de la cadena larga');
 }
 
-// 19) Los precios siguen la cadena: nunca hace falta algo que aún no se puede pagar
-{
-  const orders = PLANETS[0].orders;
-  // qué máquina hace falta para cada objeto
-  const maker = {};
-  for (const [k, b] of Object.entries(BUILDINGS)) if (b.recipe) maker[b.recipe.out] = k;
-  const needs = (item, acc = new Set()) => {
-    const m = maker[item];
-    if (!m) return acc;
-    acc.add(m);
-    for (const t in BUILDINGS[m].recipe.in) needs(t, acc);
-    return acc;
-  };
-  // ganando solo con los pedidos (sin contar el pago por pieza), ¿llega para lo que se pide?
-  let earned = 0;
-  const bought = new Set();
-  for (const o of orders) {
-    for (const m of needs(o.item)) if (!bought.has(m)) { earned -= BUILDINGS[m].price; bought.add(m); }
-    // las piezas entregadas también pagan
-    earned += o.amount * ITEMS[o.item].value;
-    assert.ok(earned >= 0, `al llegar al pedido de ${o.item} faltan ${-earned} créditos`);
-    earned += o.pay;
-  }
-  console.log('✓ la economía del planeta 1 nunca se atasca (sobran', earned, 'créditos)');
-}
-
-// 20) Pedido de rescate: te gastas el dinero en el divisor y no te llega para la prensa
-{
-  const s = createGame(55);
-  s.orderIndex = 1;                       // pedido 2: placas
-  s.money = 20;
-  own(s, 'divisor');                      // ...porque compraste el divisor
-  assert.ok(isStuck(s), 'atascado: sin prensa y sin dinero');
-  run(s, 1.1);
-  const r = s.rescue;
-  assert.ok(r, 'Chatarrex abre un rescate');
-  assert.equal(r.item, 'chatarra', 'con lo que tienes solo puedes mandar chatarra');
-  assert.ok(r.rate > beltRate(1), 'pide más de lo que lleva una cinta: hay que montar varias líneas');
-  assert.ok(20 + r.pay >= BUILDINGS.prensa.price, 'paga lo justo para la prensa');
-  const { x, y } = s.ship;
-  // a ritmo flojo (una sola cinta) no se cumple
-  for (let i = 0; i < 25 * TICK_RATE; i++) { if (i % 6 === 0) tryInsert(s, x, y, 'chatarra', 0); step(s); }
-  assert.ok(s.rescue, 'una cinta sola no llega');
-  assert.equal(s.money, 20, 'y la chatarra suelta no se paga');
-  // a buen ritmo, sí
-  for (let i = 0; i < 25 * TICK_RATE && s.rescue; i++) { if (i % 3 === 0) tryInsert(s, x, y, 'chatarra', 0); step(s); }
-  assert.equal(s.rescue, null, 'rescate cumplido');
-  assert.ok(s.money >= BUILDINGS.prensa.price);
-  assert.ok(applyAction(s, { type: 'buy', kind: 'prensa' }).ok, 'ya puedes comprar la prensa');
-  run(s, 1.1);
-  assert.equal(s.rescue, null, 'y no vuelve a saltar');
-  console.log('✓ pedido de rescate: chatarra a', r.rate, '/s, paga', r.pay);
-}
-
-// 21) El rescate usa lo más valioso que ya sabes fabricar
-{
-  const s = createGame(56);
-  own(s, 'prensa', 'ensambladora', 'divisor');
-  s.orderIndex = 4;                       // pedido 5: alambre (falta la trefiladora)
-  s.money = 0;
-  run(s, 1.1);
-  assert.equal(s.rescue.item, 'engranaje', 'pide engranajes, que es lo mejor que tienes');
-  assert.ok(Math.abs(s.rescue.rate - 2.5) < 1e-9, 'dos ensambladoras: 2,5 engranajes/s');
-  assert.equal(rescueCount(s), 0);
-  const twin = deserialize(serialize(s));
-  assert.deepEqual(twin.rescue, s.rescue, 'el rescate se guarda con la partida');
-  console.log('✓ rescate con engranajes a 2,5/s');
-}
-
 // 22) Deshacer: cada acción de construcción devuelve otra acción plana que la revierte
 {
   const s = createGame(61);
@@ -503,7 +408,6 @@ for (const lvl of [1, 2, 3]) {
   // y deshacer la primera colocación las quita
   applyAction(s, a.undo);
   assert.equal(Object.keys(s.entities).length, 0);
-  assert.equal(applyAction(s, { type: 'buy', kind: 'divisor' }).undo, undefined, 'las compras no se deshacen');
   console.log('✓ deshacer: colocar, sustituir, girar y borrar por área');
 }
 
@@ -563,31 +467,33 @@ for (const lvl of [1, 2, 3]) {
   console.log('✓ puentes encadenados: cruza 3 cintas y entrega', s.delivered.chatarra);
 }
 
-// 25) Todos los planetas: cada pedido se puede fabricar allí, con máquinas a la venta,
-// y ganando solo con los pedidos de ESE planeta (empezando sin un crédito) nunca falta dinero
+// 25) Todos los planetas: cada pedido se puede fabricar allí con lo que ya tienes
+// desbloqueado en ese momento, todas las máquinas se desbloquean y se usan, y los
+// ritmos caben por las 8 bocas de la nave
 {
   const raw = (item, acc = new Set()) => {
     if (Object.values(NODES).some((n) => n.item === item)) { acc.add(item); return acc; }
-    const m = Object.keys(BUILDINGS).find((k) => BUILDINGS[k].recipe?.out === item);
-    for (const t in BUILDINGS[m].recipe.in) raw(t, acc);
+    for (const t in BUILDINGS[MAKER[item]].recipe.in) raw(t, acc);
     return acc;
   };
-  const owned = new Set(['cinta', 'extractor']);
+  const have = new Set(STARTING_UNLOCKS);
+  const used = new Set();
   PLANETS.forEach((pl, p) => {
-    let money = 0;
-    for (const o of pl.orders) {
+    pl.orders.forEach((o, i) => {
       for (const r of raw(o.item)) assert.ok(pl.resources.includes(r), `planeta ${p + 1}: ${o.item} necesita ${r}, que no hay`);
       for (const m of machinesFor(o.item)) {
-        assert.ok(shopAt(p).includes(m), `planeta ${p + 1}: ${m} no se vende`);
-        if (!owned.has(m)) { money -= BUILDINGS[m].price; owned.add(m); }
+        assert.ok(have.has(m), `planeta ${p + 1}, pedido ${i + 1} (${o.item}): falta desbloquear ${m}`);
+        used.add(m);
       }
-      assert.ok(money >= 0, `planeta ${p + 1}: al pedido de ${o.item} le faltan ${-money} ₡`);
-      money += o.amount * ITEMS[o.item].value + o.pay;
-    }
-    // las máquinas nuevas del planeta se usan en algún pedido
-    for (const m of pl.shop) if (BUILDINGS[m].recipe) assert.ok(owned.has(m), `planeta ${p + 1}: ${m} no la pide ningún pedido`);
+      assert.ok(o.rate <= 8 * beltRate(), `planeta ${p + 1}: ritmo ${o.rate}/s no cabe por la nave`);
+      for (const u of o.unlocks) have.add(u);
+    });
   });
-  console.log('✓ los', PLANETS.length, 'planetas: pedidos fabricables y economía sin atascos');
+  for (const k in BUILDINGS) {
+    assert.ok(unlockedBy(k) || STARTING_UNLOCKS.includes(k), `${k} nunca se desbloquea`);
+    if (BUILDINGS[k].recipe) assert.ok(used.has(k), `${k} no la pide ningún pedido`);
+  }
+  console.log('✓ los', PLANETS.length, 'planetas: desbloqueos en orden, sin atascos y ritmos que caben');
 }
 
 // 26) Las cadenas nuevas producen (cada máquina final, alimentada a mano, saca su producto)

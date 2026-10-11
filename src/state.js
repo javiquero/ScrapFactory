@@ -6,12 +6,12 @@
 // ni se enterará. La simulación (sim.js) es determinista a partir de este estado.
 
 import {
-  BUILDINGS, MAP_W, MAP_H, BELT_SPACING, PLANETS, SHIP_SIZE, MAX_LEVEL, LEVELED,
-  planetAt, orderAt, shopAt, upgradeCost, baseLevels, STARTING_UNLOCKS,
+  BUILDINGS, MAP_W, MAP_H, BELT_SPACING, PLANETS, SHIP_SIZE, TICK_RATE, RATE_SECONDS,
+  orderAt, STARTING_UNLOCKS,
 } from './defs.js';
 import { generateWorld, key } from './world.js';
 
-export const SAVE_VERSION = 5;
+export const SAVE_VERSION = 6;
 
 export function createGame(seed = Math.floor(Math.random() * 1e9)) {
   const world = generateWorld(seed, 0);
@@ -24,11 +24,10 @@ export function createGame(seed = Math.floor(Math.random() * 1e9)) {
     nextId: 1,
     entities: {},             // "x,y" -> entidad
     ship: { x: world.spawn.x, y: world.spawn.y }, // esquina de arriba a la izquierda de la nave (2×2)
-    money: 0,                 // créditos Chatarrex
-    unlocked: [...STARTING_UNLOCKS],
-    levels: baseLevels(),     // nivel de cada tipo de edificio (se compra)
+    unlocked: [...STARTING_UNLOCKS], // se amplía al cumplir pedidos
     orderIndex: 0,
     orderProgress: 0,
+    hits: [],                 // ticks de las últimas entregas del pedido (para medir el ritmo)
     delivered: {},            // total histórico por objeto
     events: [],               // cola de eventos para la interfaz (no se guarda)
     rev: 0,                   // sube con cada cambio estructural (para redibujar)
@@ -49,12 +48,12 @@ export function isShip(state, x, y) {
   return !!s && x >= s.x && y >= s.y && x < s.x + SHIP_SIZE && y < s.y + SHIP_SIZE;
 }
 
-// Precio del siguiente nivel de un tipo de edificio, o null si ya está al máximo
-export function nextUpgrade(state, kind) {
-  if (!LEVELED.includes(kind)) return null;
-  const lvl = state.levels[kind] || 1;
-  if (lvl >= MAX_LEVEL) return null;
-  return { to: lvl + 1, cost: upgradeCost(kind, lvl + 1) };
+// Ritmo actual del pedido: piezas por segundo en la ventana de RATE_SECONDS
+export function orderRate(state) {
+  const from = state.tick - RATE_SECONDS * TICK_RATE;
+  let n = 0;
+  for (const t of state.hits || []) if (t > from) n++;
+  return n / RATE_SECONDS;
 }
 
 // Semilla del planeta siguiente: sale de la anterior (determinista, para el multijugador)
@@ -82,7 +81,7 @@ export const replaceable = (e) => e.kind === 'cinta' || e.kind === 'divisor' || 
 // Comprueba si se puede colocar algo; devuelve null si sí, o el motivo si no.
 export function canPlace(state, kind, x, y) {
   if (!BUILDINGS[kind]) return 'Edificio desconocido';
-  if (!state.unlocked.includes(kind)) return 'Aún no lo has comprado';
+  if (!state.unlocked.includes(kind)) return 'Aún no está desbloqueado';
   if (!inBounds(x, y)) return 'Fuera del mapa';
   if (isShip(state, x, y)) return 'Ahí está tu nave';
   const existing = state.entities[key(x, y)];
@@ -160,34 +159,9 @@ function apply(state, action) {
       if (removed) state.rev++;
       return removed ? { ok: true } : { ok: false, reason: 'Nada que borrar' };
     }
-    case 'buy': {
-      // Comprar un edificio nuevo en el catálogo
-      const b = BUILDINGS[action.kind];
-      if (!b) return { ok: false, reason: 'Edificio desconocido' };
-      if (state.unlocked.includes(action.kind)) return { ok: false, reason: 'Ya lo tienes' };
-      if (!shopAt(state.planet).includes(action.kind)) return { ok: false, reason: 'No se vende en este planeta' };
-      if (state.money < b.price) return { ok: false, reason: 'No te llega el dinero' };
-      state.money -= b.price;
-      state.unlocked.push(action.kind);
-      state.rev++;
-      state.events.push({ type: 'bought', kind: action.kind });
-      return { ok: true };
-    }
-    case 'upgrade': {
-      // Subir de nivel TODOS los edificios de un tipo
-      if (!state.unlocked.includes(action.kind)) return { ok: false, reason: 'Primero tienes que comprarlo' };
-      const up = nextUpgrade(state, action.kind);
-      if (!up) return { ok: false, reason: 'Ya está al máximo' };
-      if (state.money < up.cost) return { ok: false, reason: 'No te llega el dinero' };
-      state.money -= up.cost;
-      state.levels[action.kind] = up.to;
-      state.rev++;
-      state.events.push({ type: 'upgraded', kind: action.kind, level: up.to });
-      return { ok: true };
-    }
     case 'nextPlanet': {
-      // Despegar: mapa nuevo con un recurso más. Se conserva lo comprado, las
-      // mejoras, el dinero y el total enviado; la fábrica empieza de cero.
+      // Despegar: mapa nuevo con un recurso más. Se conservan las máquinas
+      // desbloqueadas y el total enviado; la fábrica empieza de cero.
       if (!state.planetDone) return { ok: false, reason: 'Aún quedan pedidos en este planeta' };
       if (!hasNextPlanet(state)) return { ok: false, reason: 'No hay más planetas (de momento)' };
       const p = state.planet + 1;
@@ -199,6 +173,7 @@ function apply(state, action) {
       state.ship = { x: state.world.spawn.x, y: state.world.spawn.y };
       state.orderIndex = 0;
       state.orderProgress = 0;
+      state.hits = [];
       state.rev++;
       state.events.push({ type: 'planetStart', planet: p });
       return { ok: true };
@@ -276,46 +251,9 @@ export function deserialize(json) {
   return { ...data, world, events: [], rev: (data.rev || 0) + 1 };
 }
 
-// Pone al día partidas guardadas con versiones anteriores
+// Las partidas de antes de la versión 6 (con dinero y tienda) no se pueden poner
+// al día: el juego cambió de reglas. Se empieza una nueva.
 function migrate(data) {
-  if (data.version === 2) {
-    for (const k in data.entities) {
-      const e = data.entities[k];
-      if (e.kind === 'cinta') { e.items = e.item ? [e.item] : []; delete e.item; }
-    }
-    data.orderIndex = Math.min(data.orderIndex || 0, 5);
-    data.orderProgress = 0;
-    data.version = 3;
-  }
-  if (data.version === 3) {
-    // llegan los planetas: la partida antigua sigue en el planeta 1
-    data.planet = 0;
-    data.planetDone = false;
-    data.version = 4;
-  }
-  if (data.version === 4) {
-    // llegan la nave fija, el dinero y la cadena larga de la chatarra
-    const planet = data.planet || 0;
-    const world = generateWorld(data.seed, planet);
-    data.ship = { x: world.spawn.x, y: world.spawn.y };
-    const rename = { taller: 'cristaleria', montadora: planet >= 1 ? 'montasolar' : 'montadora' };
-    for (const k in data.entities) {
-      const e = data.entities[k];
-      if (rename[e.kind]) e.kind = rename[e.kind];
-      const onShip = e.x >= data.ship.x && e.y >= data.ship.y && e.x < data.ship.x + SHIP_SIZE && e.y < data.ship.y + SHIP_SIZE;
-      if (e.kind === 'teletransportador' || !BUILDINGS[e.kind] || onShip) delete data.entities[k];
-    }
-    // se conserva lo que ya tenía; los pedidos empiezan la lista nueva desde donde iba
-    const had = (data.unlocked || []).map((u) => rename[u] || u).filter((u) => BUILDINGS[u]);
-    data.unlocked = [...new Set([...STARTING_UNLOCKS, ...had])];
-    data.levels = { ...baseLevels(), ...(data.levels || {}) };
-    for (const k of Object.keys(data.levels)) if (!LEVELED.includes(k)) delete data.levels[k];
-    data.orderIndex = Math.min(data.orderIndex || 0, planetAt(planet).orders.length - 1);
-    data.orderProgress = 0;
-    data.planetDone = false;
-    data.money = 100; // un detalle de Chatarrex por las molestias
-    data.version = 5;
-  }
   if (data.version !== SAVE_VERSION) throw new Error('Versión de guardado incompatible');
   return data;
 }

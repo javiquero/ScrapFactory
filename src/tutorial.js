@@ -28,14 +28,8 @@ export const STEPS = [
     done: (s) => s.orderIndex >= 1,
   },
   {
-    tool: 'panel',
-    text: 'Chatarrex te ha pagado. Abre el catálogo (botón «Más» o tu dinero) y compra la prensa: convierte chatarra en placas.',
-    done: (s) => s.unlocked.includes('prensa'),
-    shopHint: 'prensa',
-  },
-  {
     tool: 'prensa',
-    text: 'Pon la prensa en el camino de la chatarra: si la tocas encima de la cinta, la sustituye. Toca la prensa para girar su salida hacia la nave.',
+    text: '¡Pedido cumplido! Chatarrex te manda la prensa: convierte chatarra en placas. Ponla en el camino de la chatarra (encima de la cinta la sustituye) y tócala para girar su salida hacia la nave.',
     done: (s) => has(s, 'prensa'),
   },
   {
@@ -44,7 +38,7 @@ export const STEPS = [
   },
   {
     last: true,
-    text: '¡Ya sabes lo básico! Cada pedido pide algo nuevo: mira en el catálogo qué máquina lo fabrica (los dibujos dicen qué entra y qué sale).',
+    text: '¡Ya sabes lo básico! Cada pedido cumplido desbloquea máquinas. Los grandes piden un ritmo mínimo (lo ves bajo el pedido): si no llegas, monta más líneas en paralelo.',
     done: () => false,
   },
 ];
@@ -74,7 +68,6 @@ export class Tutorial {
   render() {
     const step = this.active ? STEPS[this.index] : null;
     this.ui.tutTool = step?.tool || null;
-    this.ui.tutShop = step?.shopHint || null;
     this.ui.showTutorial(step, this.index, STEPS.length);
   }
 

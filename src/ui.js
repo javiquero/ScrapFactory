@@ -1,9 +1,8 @@
 // Interfaz en HTML por encima del lienzo: pedido, barra rápida, catálogo, comunicados.
 
-import { BUILDINGS, CATEGORIES, ITEMS, PLANETS, MACHINE_BUFFER, beltRate, extractorRate, craftTime, shopAt } from './defs.js';
-import { currentOrder, hasNextPlanet, nextUpgrade } from './state.js';
-import { money, shipText } from './messages.js';
-import { rescueCount, RESCUE_SECONDS } from './rescue.js';
+import { BUILDINGS, CATEGORIES, ITEMS, PLANETS, MACHINE_BUFFER, beltRate, extractorRate, craftTime, unlockedBy } from './defs.js';
+import { currentOrder, hasNextPlanet, orderRate } from './state.js';
+import { shipText } from './messages.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -15,23 +14,22 @@ const SVG = {
   mas: '<svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><rect x="5" y="5" width="9" height="9" rx="2.5"/><rect x="18" y="5" width="9" height="9" rx="2.5"/><rect x="5" y="18" width="9" height="9" rx="2.5"/><path d="M22.5 18v9M18 22.5h9"/></svg>',
 };
 
-// En qué planeta empieza a venderse un edificio
-function firstPlanet(kind) {
-  const p = PLANETS.findIndex((pl) => pl.shop.includes(kind));
-  return p < 0 ? null : p;
+// Cuándo se desbloquea un edificio que aún no tienes
+function unlockText(kind, state) {
+  const u = unlockedBy(kind);
+  if (!u) return 'Próximamente.';
+  if (u.planet > state.planet) return `Se desbloquea en el planeta ${u.planet + 1}.`;
+  return `Se desbloquea al cumplir el pedido ${u.order + 1}.`;
 }
 
 export class UI {
-  constructor({ icons, ctl, onSelectTool, onUndo, onInspectRotate, onInspectRemove, onReset, onLaunch, onBuy, onUpgrade, onTutorial, getState }) {
+  constructor({ icons, ctl, onSelectTool, onUndo, onInspectRotate, onInspectRemove, onReset, onLaunch, onTutorial }) {
     this.icons = icons;
     this.ctl = ctl;
-    this.cb = { onSelectTool, onUndo, onInspectRotate, onInspectRemove, onReset, onLaunch, onBuy, onUpgrade, onTutorial };
+    this.cb = { onSelectTool, onUndo, onInspectRotate, onInspectRemove, onReset, onLaunch, onTutorial };
     this.canUndo = false;
     this.tutTool = null;     // herramienta que el tutorial está señalando
-    this.tutShop = null;     // y lo que hay que comprar en el catálogo
-    this.lastMoney = -1;
     $('launchBtn').addEventListener('click', () => this.cb.onLaunch());
-    $('wallet').addEventListener('click', () => this.openPanel(getState()));
     this.memoQueue = [];
     this.memoTimer = null;
     this.hintTimer = null;
@@ -93,7 +91,7 @@ export class UI {
 
   // Los comunicados van debajo de lo que haya arriba (dinero o tutorial)
   placeMemo() {
-    const below = !$('tutorial').hidden ? $('tutorial') : $('wallet');
+    const below = !$('tutorial').hidden ? $('tutorial') : $('order');
     $('memo').style.top = `${below.getBoundingClientRect().bottom + 10}px`;
   }
 
@@ -110,43 +108,29 @@ export class UI {
   renderPanel(state) {
     const list = $('panelList');
     const scroll = list.scrollTop;
-    const shop = shopAt(state.planet);
-    const coins = state.money || 0;
     let html = '';
     for (const cat of CATEGORIES) {
       let rows = '';
       for (const k in BUILDINGS) {
         const b = BUILDINGS[k];
         if (b.category !== cat.id) continue;
-        const owned = state.unlocked.includes(k);
         const img = `<img src="${this.icons[k] || ''}" alt="">`;
         const flow = this.flowHtml(k, state);
-        if (owned) {
-          const up = nextUpgrade(state, k);
-          const side = up
-            ? `<button class="buy up" data-up="${k}" data-cost="${up.cost}" ${coins < up.cost ? 'disabled' : ''}>Nivel ${up.to}<small>${money(up.cost)}</small></button>`
-            : (state.levels[k] ? '<span class="max">Nivel máx.</span>' : '');
-          rows += `<div class="entry"><button class="entry-main" data-k="${k}">${img}<span><b>${b.name}</b>${flow}<small>${b.desc} <i>${rateText(k, state)}</i></small></span></button>
-            <div class="entry-side">${side}</div></div>`;
-        } else if (shop.includes(k)) {
-          rows += `<div class="entry locked"><div class="entry-main">${img}<span><b>${b.name}</b>${flow}<small>${b.desc}</small></span></div>
-            <div class="entry-side"><button class="buy ${this.tutShop === k ? 'tut' : ''}" data-buy="${k}" data-cost="${b.price}" ${coins < b.price ? 'disabled' : ''}>Comprar<small>${money(b.price)}</small></button></div></div>`;
+        if (state.unlocked.includes(k)) {
+          rows += `<div class="entry ${this.tutTool === k ? 'tut' : ''}"><button class="entry-main" data-k="${k}">${img}<span><b>${b.name}</b>${flow}<small>${b.desc} <i>${rateText(k, state)}</i></small></span></button></div>`;
         } else {
-          const p = firstPlanet(k);
-          rows += `<div class="entry locked soon"><div class="entry-main">${img}<span><b>${b.name}</b>${flow}<small>${p == null ? 'Próximamente.' : `Se vende en el planeta ${p + 1}.`}</small></span></div></div>`;
+          const later = (unlockedBy(k)?.planet ?? 99) > state.planet;
+          rows += `<div class="entry locked ${later ? 'soon' : ''}"><div class="entry-main">${img}<span><b>${b.name}</b>${flow}<small>${unlockText(k, state)}</small></span></div></div>`;
         }
       }
       if (rows) html += `<div class="cat">${cat.name}</div>${rows}`;
     }
     list.innerHTML = html;
     list.scrollTop = scroll;
-    $('panelMoney').textContent = money(coins);
     list.querySelectorAll('[data-k]').forEach((el) => el.addEventListener('click', () => {
       this.closePanel();
       this.cb.onSelectTool(el.dataset.k, true);
     }));
-    list.querySelectorAll('[data-buy]').forEach((el) => el.addEventListener('click', () => this.cb.onBuy(el.dataset.buy)));
-    list.querySelectorAll('[data-up]').forEach((el) => el.addEventListener('click', () => this.cb.onUpgrade(el.dataset.up)));
   }
 
   // Lo que entra → lo que sale, con dibujos (para encontrar de un vistazo quién hace muelles)
@@ -164,14 +148,6 @@ export class UI {
     return '';
   }
 
-  // Con el catálogo abierto, los botones se encienden en cuanto llega el dinero
-  refreshPanelMoney(state) {
-    if (!this.panelOpen) return;
-    const coins = state.money || 0;
-    $('panelMoney').textContent = money(coins);
-    $('panelList').querySelectorAll('[data-cost]').forEach((el) => { el.disabled = coins < Number(el.dataset.cost); });
-  }
-
   closePanel() {
     $('scrim').hidden = true;
     $('panel').classList.remove('open');
@@ -179,49 +155,30 @@ export class UI {
   }
 
   // ---- Pedido ----
-  renderMoney(state) {
-    const m = Math.floor(state.money || 0);
-    if (m === this.lastMoney) return;
-    const big = this.lastMoney >= 0 && m - this.lastMoney >= 50;
-    this.lastMoney = m;
-    $('walletAmount').textContent = money(m);
-    if (big) {
-      const el = $('wallet');
-      el.classList.remove('paid');
-      void el.offsetWidth;
-      el.classList.add('paid');
-    }
-  }
-
   renderOrder(state, celebrate = false) {
-    this.renderMoney(state);
-    const r = state.rescue;
-    const got = r ? rescueCount(state) : 0;
-    const k = `${state.planet}:${state.orderIndex}:${state.orderProgress}:${state.planetDone}:${r ? r.item + got : ''}`;
+    const o = currentOrder(state);
+    const rate = o.rate ? orderRate(state) : 0;
+    const k = `${state.planet}:${state.orderIndex}:${state.orderProgress}:${state.planetDone}:${rate.toFixed(1)}`;
     if (k === this.lastOrderKey && !celebrate) return;
     this.lastOrderKey = k;
-    $('order').classList.toggle('rescue', !!r);
-    if (r) {
-      // pedido de rescate: mide un ritmo, no un total
-      $('orderIcon').src = this.icons['item_' + r.item] || '';
-      $('orderPlanet').textContent = 'Rescate de Chatarrex';
-      $('orderTitle').textContent = `${num(r.rate)} ${ITEMS[r.item].plural}/s`;
-      $('orderCount').textContent = `${got} / ${r.amount} en ${RESCUE_SECONDS} s · paga ${money(r.pay)}`;
-      $('orderFill').style.width = `${Math.min(100, (got / r.amount) * 100)}%`;
-      $('launchBtn').hidden = true;
-    } else {
-      const o = currentOrder(state);
-      const total = PLANETS[state.planet].orders.length;
-      $('orderIcon').src = this.icons['item_' + o.item] || '';
-      $('orderPlanet').textContent = `Planeta ${state.planet + 1} · ${PLANETS[state.planet].nick}`;
-      $('orderTitle').textContent = !o.bonus ? `Pedido ${state.orderIndex + 1} de ${total}`
-        : hasNextPlanet(state) ? 'Pedido extra' : `Pedido extra · planeta ${state.planet + 2} en obras`;
-      $('orderCount').textContent = `${state.orderProgress} / ${o.amount} ${ITEMS[o.item].plural} · paga ${money(o.pay)}`;
-      const canLaunch = state.planetDone && hasNextPlanet(state);
-      $('launchBtn').hidden = !canLaunch;
-      if (canLaunch) $('launchBtn').textContent = `Despegar al planeta ${state.planet + 2}`;
-      $('orderFill').style.width = `${Math.min(100, (state.orderProgress / o.amount) * 100)}%`;
+    const total = PLANETS[state.planet].orders.length;
+    $('orderIcon').src = this.icons['item_' + o.item] || '';
+    $('orderPlanet').textContent = `Planeta ${state.planet + 1} · ${PLANETS[state.planet].nick}`;
+    $('orderTitle').textContent = !o.bonus ? `Pedido ${state.orderIndex + 1} de ${total}`
+      : hasNextPlanet(state) ? 'Pedido extra' : `Pedido extra · planeta ${state.planet + 2} en obras`;
+    $('orderCount').textContent = `${state.orderProgress} / ${o.amount} ${ITEMS[o.item].plural}`;
+    // ritmo: lo que llega más despacio que el mínimo no cuenta
+    const r = $('orderRate');
+    r.hidden = !o.rate;
+    if (o.rate) {
+      const ok = rate >= o.rate * 0.9;
+      r.textContent = `Ritmo ${num(rate)}/s · mín. ${num(o.rate)}/s${ok ? ' ✓' : ' · no cuenta'}`;
+      r.classList.toggle('slow', !ok);
     }
+    const canLaunch = state.planetDone && hasNextPlanet(state);
+    $('launchBtn').hidden = !canLaunch;
+    if (canLaunch) $('launchBtn').textContent = `Despegar al planeta ${state.planet + 2}`;
+    $('orderFill').style.width = `${Math.min(100, (state.orderProgress / o.amount) * 100)}%`;
     if (celebrate) {
       const el = $('order');
       el.classList.remove('done');
@@ -310,19 +267,18 @@ export class UI {
 export const num = (v) => (Math.round(v * 100) / 100).toLocaleString('es-ES');
 
 // Ritmo de un tipo de edificio a su nivel actual
-export function rateText(kind, state) {
-  const lv = state.levels || {};
+export function rateText(kind) {
   switch (kind) {
-    case 'cinta': return `Nivel ${lv.cinta} · hasta ${num(beltRate(lv.cinta))} objetos/s`;
-    case 'divisor': return `Tan rápido como las cintas (${num(beltRate(lv.cinta))}/s)`;
-    case 'puente': return `Se pone solo al cruzar una cinta con otra. Tan rápido como las cintas (${num(beltRate(lv.cinta))}/s)`;
-    case 'extractor': return `Nivel ${lv.extractor} · ${num(extractorRate(lv.extractor))} por segundo de lo que tenga debajo`;
+    case 'cinta': return `Hasta ${num(beltRate())} objetos/s`;
+    case 'divisor': return `Tan rápido como las cintas (${num(beltRate())}/s)`;
+    case 'puente': return `Se pone solo al cruzar una cinta con otra. Tan rápido como las cintas (${num(beltRate())}/s)`;
+    case 'extractor': return `${num(extractorRate())} por segundo de lo que tenga debajo`;
     default: {
       const r = BUILDINGS[kind]?.recipe;
       if (!r) return '';
-      const per = 1 / craftTime(kind, lv[kind]);
+      const per = 1 / craftTime(kind);
       const ins = Object.entries(r.in).map(([t, n]) => `${num(n * per)} ${ITEMS[t].name.toLowerCase()}`).join(' + ');
-      return `Nivel ${lv[kind]} · ${ins} → ${num(per)} ${ITEMS[r.out].name.toLowerCase()} por segundo`;
+      return `${ins} → ${num(per)} ${ITEMS[r.out].name.toLowerCase()} por segundo`;
     }
   }
 }
@@ -341,7 +297,7 @@ function describe(e, state) {
     case 'extractor': {
       const node = state.world.nodes[`${e.x},${e.y}`];
       const what = node ? ITEMS[node].name.toLowerCase() : 'nada';
-      return `Saca ${what} · ${num(extractorRate(state.levels.extractor))}/s${e.out.length >= 4 ? ' · salida atascada' : ''}`;
+      return `Saca ${what} · ${num(extractorRate())}/s${e.out.length >= 4 ? ' · salida atascada' : ''}`;
     }
     default: {
       const r = BUILDINGS[e.kind]?.recipe;

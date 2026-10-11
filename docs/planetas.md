@@ -1,4 +1,4 @@
-# Progresión: planetas, nave y dinero
+# Progresión: planetas, nave, pedidos y desbloqueos
 
 ## La idea
 
@@ -7,32 +7,31 @@ Montar una cadena y esperar aburre. El reto está en **volver a resolver la log�
 - **Planeta 1 (SC-7, "El Vertedero")**: solo hay chatarra, pero tiene **toda la cadena larga**: 10 máquinas y 25 pedidos, hasta llegar a robots de limpieza.
 - **Cada planeta nuevo = un recurso nuevo** que se mezcla con lo de antes. Mapa nuevo y vacío: la fábrica se queda atrás.
 - **La nave** es el único sitio donde se entrega. Una sola, fija, de 2×2 casillas, aparece sola al llegar y no se puede mover ni quitar. Recibe por los cuatro lados, dos entradas por lado (8 bocas). Así no vale poner un punto de entrega al lado de cada montón: hay que traer las cintas hasta ella.
-- **Dinero (créditos ₡)**: Chatarrex solo paga lo que pide el pedido actual: cada pieza que cuenta para el pedido (su `value`) y un extra al completarlo (`pay`). Lo demás la nave lo acepta pero no lo paga. Con el dinero se **compran máquinas** y **mejoras de nivel** en el catálogo.
+- **Sin dinero**: cada pedido cumplido desbloquea maquinaria (`unlocks`). Los pedidos grandes piden un **ritmo mínimo** de piezas por segundo en la nave; lo que llega más despacio no cuenta. Así una línea no basta y hay que montar varias en paralelo. No hay mejoras de velocidad (de momento).
 
-## Economía
+## Pedidos: cantidad, ritmo y desbloqueos
 
-- Se empieza con 0 ₡, la cinta y el extractor.
-- Solo se paga lo del pedido. Así no vale llenar la nave de chatarra para hacerse rico.
-- Comprar (`{type:'buy', kind}`) y mejorar (`{type:'upgrade', kind}`) son acciones serializables, como todo.
-- Las mejoras suben de nivel **todos** los edificios de un tipo (×1 / ×1,5 / ×2). Precio: cinta 300 / 900, extractor 250 / 750, máquinas 2× y 6× su precio (mínimo 200).
-- Al despegar se conservan el dinero, lo comprado y las mejoras. Se pierde la fábrica.
-- **Pedido de rescate** (`src/rescue.js`): si te gastas el dinero en lo que no toca (un divisor, una mejora…) y ya no puedes pagar las máquinas que necesita el pedido actual, Chatarrex te suelta un comentario sarcástico y un rescate. Se cumple solo con lo que ya tienes: pide el objeto más valioso que sabes fabricar en este planeta a un **ritmo** de 2 máquinas finales (3 extractores si es en bruto) durante 20 s. Paga lo justo (lo que falta + 10 %, mínimo 50 ₡). Mientras dura, ocupa la etiqueta del pedido; al cumplirlo vuelve el pedido normal. Se comprueba una vez por segundo dentro de `step()`, así que también desatasca partidas guardadas.
-- Una prueba (`tests/sim.test.mjs`, nº 19) comprueba que, contando solo lo que pagan los pedidos y sus piezas, nunca hace falta una máquina que aún no se puede pagar.
+- Cada pedido: `item`, `amount`, `rate` (piezas/s mínimas, medidas en los últimos 10 s; 0 = sin mínimo) y `unlocks`.
+- El ritmo se expresa en **líneas**: `lines × lineRate(item)`, donde una línea es lo que saca una máquina (o un extractor, si es en bruto). La cantidad suele ser ritmo × 1–4 minutos.
+- Se tolera un 10 % por debajo del mínimo por los saltos de las cintas.
+- Si no llegas al ritmo, la etiqueta del pedido lo dice en rojo y Chatarrex avisa una vez.
+- Prueba: todos los pedidos de los 8 planetas se pueden hacer con lo desbloqueado hasta ese momento, y todos los ritmos caben por las 8 bocas de la nave.
+- Idea para más adelante: **modo difícil** al terminar el último planeta, con recursos que se agotan.
 
 ## Planeta 1: la cadena larga de la chatarra
 
-| Máquina | Precio | Entra | Sale | Tiempo |
+| Máquina | Se desbloquea en | Entra | Sale | Tiempo |
 | --- | --- | --- | --- | --- |
-| Prensa | 50 | 2 chatarra | placa | 0,4 s |
-| Divisor | 80 | — | reparte | — |
-| Ensambladora | 150 | 2 placas + 1 chatarra | engranaje | 0,8 s |
-| Trefiladora | 200 | 2 chatarra | alambre | 0,4 s |
-| Cortadora | 250 | 1 placa | tornillos | 0,4 s |
-| Bobinadora | 350 | 2 alambre | muelle | 0,8 s |
-| Montadora | 500 | 1 engranaje + 1 tornillos | mecanismo | 0,8 s |
-| Soldadora | 600 | 1 placa + 1 alambre | carcasa | 0,8 s |
-| Motorera | 900 | 1 mecanismo + 1 muelle | motor | 1,6 s |
-| Línea de robots | 1400 | 1 motor + 1 carcasa | robot de limpieza | 1,6 s |
+| Prensa | pedido 1 | 2 chatarra | placa | 0,4 s |
+| Divisor | pedido 2 | — | reparte | — |
+| Ensambladora | pedido 3 | 2 placas + 1 chatarra | engranaje | 0,8 s |
+| Trefiladora | pedido 4 | 2 chatarra | alambre | 0,4 s |
+| Cortadora | pedido 6 | 1 placa | tornillos | 0,4 s |
+| Bobinadora | pedido 7 | 2 alambre | muelle | 0,8 s |
+| Montadora | pedido 8 | 1 engranaje + 1 tornillos | mecanismo | 0,8 s |
+| Soldadora | pedido 10 | 1 placa + 1 alambre | carcasa | 0,8 s |
+| Motorera | pedido 12 | 1 mecanismo + 1 muelle | motor | 1,6 s |
+| Línea de robots | pedido 14 | 1 motor + 1 carcasa | robot de limpieza | 1,6 s |
 
 ```
 chatarra ─prensa──────▶ placa ─cortadora──▶ tornillos ┐
@@ -44,7 +43,7 @@ chatarra ─prensa──────▶ placa ─cortadora──▶ tornillos �
 
 Ritmos cuadrados (nivel 1): una cinta llena (5/s) alimenta una prensa o una trefiladora; una prensa alimenta una cortadora; una trefiladora, una bobinadora; una ensambladora, una montadora; una montadora, dos motoreras; una motorera, una línea de robots.
 
-25 pedidos, de 40 chatarra (paga 60 ₡) a 100 robots (paga 4.000 ₡). El último abre el despegue. Después hay pedidos extra sin fin para quien no quiera irse todavía.
+21 pedidos, de 40 chatarra a cientos de robots a 1,25/s. El último abre el despegue. Después hay pedidos extra sin fin para quien no quiera irse todavía.
 
 ## Los 10 recursos (un planeta cada uno)
 
@@ -67,17 +66,17 @@ Regla de las máquinas básicas: **2 de recurso → 1 de producto básico**, al 
 
 ## Planeta 2 (hecho)
 
-| Máquina | Precio | Entra | Sale |
+| Máquina | Se desbloquea en | Entra | Sale |
 | --- | --- | --- | --- |
-| Horno | 400 | 2 cristal | vidrio |
-| Cristalería | 800 | 1 placa + 1 vidrio | ventana |
-| Montadora solar | 1500 | 1 ventana + 1 engranaje | panel solar |
+| Horno | pedido 1 | 2 cristal | vidrio |
+| Cristalería | pedido 4 | 1 placa + 1 vidrio | ventana |
+| Montadora solar | pedido 6 | 1 ventana + 1 engranaje | panel solar |
 
 15 pedidos. Mezclan lo nuevo con la cadena del planeta 1 (también piden motores y robots).
 
 ## Planetas 3 a 8 (hechos)
 
-Mismo patrón en todos: una máquina básica (2 de recurso → 1, 0,4 s), una de mezcla (básico + algo de antes, 0,8 s) y una final (mezcla + algo complejo de antes, 1,6 s). 16 pedidos por planeta (`laterOrders` en `src/defs.js`); el primero siempre paga al menos la máquina básica. Cada planeta tiene su color de suelo (`PLANET_LOOK`).
+Mismo patrón en todos: una máquina básica (2 de recurso → 1, 0,4 s), una de mezcla (básico + algo de antes, 0,8 s) y una final (mezcla + algo complejo de antes, 1,6 s). 16 pedidos por planeta (`laterOrders` en `src/defs.js`): el 1 desbloquea la básica, el 4 la de mezcla y el 8 la final; cuanto más lejos, más líneas en paralelo. Cada planeta tiene su color de suelo (`PLANET_LOOK`).
 
 | Planeta | Suelo | Recurso | Básica | Mezcla | Final |
 | --- | --- | --- | --- | --- | --- |
@@ -98,6 +97,6 @@ Esporas (telar → fibra) y chatarrexium (forja → núcleo). El último product
 
 1. Al completar el último pedido, Chatarrex manda un comunicado y aparece **Despegar al planeta N** en la etiqueta del pedido.
 2. Al pulsarlo (con confirmación), se genera un mapa nuevo con los recursos de ese planeta y la nave aterriza en el centro.
-3. Se conserva: dinero, máquinas compradas, mejoras y el total enviado. Se reinicia: mapa, fábrica y pedidos.
+3. Se conserva: la maquinaria desbloqueada y el total enviado. Se reinicia: mapa, fábrica y pedidos.
 4. Despegar es una acción (`nextPlanet`) determinista: la semilla nueva sale de la anterior.
 5. Cada planeta tiene su tono de suelo.

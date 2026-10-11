@@ -45,8 +45,9 @@ async function boot() {
   let state = null;
   let isNew = false;
   const saved = store.get(SAVE_KEY);
+  let restarted = false;
   if (saved) {
-    try { state = deserialize(saved); } catch (err) { console.warn('Guardado no válido, empezamos de cero', err); }
+    try { state = deserialize(saved); } catch (err) { console.warn('Guardado no válido, empezamos de cero', err); restarted = true; }
   }
   if (!state) { state = createGame(); isNew = true; }
 
@@ -147,20 +148,6 @@ async function boot() {
       flushEvents();
       save();
     },
-    onBuy: (kind) => {
-      if (!dispatch({ type: 'buy', kind }, true).ok) return;
-      ctl.recent = [kind, ...ctl.recent.filter((k) => k !== kind)];
-      flushEvents();
-      ui.renderPanel(state);
-      save();
-    },
-    onUpgrade: (kind) => {
-      if (!dispatch({ type: 'upgrade', kind }, true).ok) return;
-      flushEvents();
-      ui.renderPanel(state);
-      save();
-    },
-    getState: () => state,
   });
 
   attachInput(app.canvas, {
@@ -209,7 +196,8 @@ async function boot() {
     if (!state.events.length) return;
     for (const ev of state.events) {
       if (ev.type === 'orderDone') {
-        ui.memo(msg.orderDoneMessage(ev.pay));
+        ui.memo(msg.orderDoneMessage(ev.unlocks));
+        for (const k of ev.unlocks) ctl.recent = [k, ...ctl.recent.filter((r) => r !== k)];
         if (!state.planetDone) ui.memo(msg.orderIntro(currentOrder(state)));
         ui.renderOrder(state, true);
         ui.renderBar(state);
@@ -227,20 +215,8 @@ async function boot() {
         clearUndo();
         for (const m of msg.planetIntro(state)) ui.memo(m);
         ui.memo(msg.orderIntro(currentOrder(state)));
-      } else if (ev.type === 'bought') {
-        ui.memo(msg.boughtMessage(ev.kind));
-        ui.renderBar(state);
-      } else if (ev.type === 'upgraded') {
-        ui.memo(msg.upgradedMessage(ev.kind, ev.level));
-      } else if (ev.type === 'wrongItem' && performance.now() - lastWrong > 30000) {
-        lastWrong = performance.now();
-        ui.memo(msg.wrongItemMessage(ev.item));
-      } else if (ev.type === 'rescueStart') {
-        for (const m of msg.rescueStartMessages(state, ev.missing)) ui.memo(m);
-        ui.renderOrder(state, true);
-      } else if (ev.type === 'rescueDone') {
-        ui.memo(msg.rescueDoneMessage(ev.pay));
-        ui.renderOrder(state, true);
+      } else if (ev.type === 'tooSlow') {
+        ui.memo(msg.tooSlowMessage(ev.rate));
       } else if (ev.type === 'firstBelt') {
         ui.memo(msg.FIRST_BELT);
       }
@@ -252,8 +228,9 @@ async function boot() {
   tut = new Tutorial({ ui, store });
   if (isNew) tut.start();
   else tut.render();
+  if (restarted) ui.memo('Chatarrex S.A. ha reestructurado la empresa: se acabaron los créditos. Ahora cada pedido cumplido te da maquinaria nueva. Tu fábrica antigua ha sido "reubicada". Empiezas de cero.');
   if (isNew) welcome();
-  else ui.memo('Bienvenido de vuelta, colono. La fábrica no se ha movido. Tus créditos tampoco: siguen donde los dejaste.');
+  else ui.memo('Bienvenido de vuelta, colono. La fábrica no se ha movido. Los pedidos tampoco: siguen esperándote.');
   setInterval(() => { if (document.getElementById('memo').hidden) ui.memo(msg.randomTip()); }, 90000);
 
   // ---- Guardado ----
@@ -281,7 +258,6 @@ async function boot() {
     ui.renderOrder(state);
     if ((inspectTick = (inspectTick + 1) % 15) === 0) {
       ui.refreshInspect(state);
-      ui.refreshPanelMoney(state);
       tut.flags.panned = (renderer.panned || 0) - panBase;
       if (tut.check(state)) ui.renderBar(state);
     }

@@ -2,11 +2,10 @@
 // No toca nada de pantalla; solo lee y escribe el estado. Determinista.
 
 import {
-  BUILDINGS, BELT_SPACING, DT, TICK_RATE, DX, DY, ITEMS, MACHINE_BUFFER, OUTPUT_BUFFER, SHIP_SIZE,
+  BUILDINGS, BELT_SPACING, DT, TICK_RATE, RATE_SECONDS, DX, DY, ITEMS, MACHINE_BUFFER, OUTPUT_BUFFER, SHIP_SIZE,
   opposite, orderAt, planetAt, beltSpeed, extractorRate, craftTime,
 } from './defs.js';
 import { key } from './world.js';
-import { checkRescue, rescueDeliver } from './rescue.js';
 
 // La nave ocupa 2×2: cualquier cosa que entre por cualquiera de sus bordes se envía
 const onShip = (state, x, y) => {
@@ -53,18 +52,29 @@ export function tryInsert(state, x, y, type, dir) {
   }
 }
 
-// Llega algo a la nave. Solo se paga (y cuenta) lo que pide el pedido actual;
-// lo demás Chatarrex se lo queda "por si acaso" y no paga nada.
+// Llega algo a la nave. Solo cuenta lo que pide el pedido actual y, si el pedido
+// pide un ritmo, solo mientras llegue a ese ritmo (medido en los últimos segundos).
+// Lo demás Chatarrex se lo queda "por si acaso".
+const RATE_TOLERANCE = 0.9; // un pelín de margen por los saltos de las cintas
 function deliver(state, type) {
   state.delivered[type] = (state.delivered[type] || 0) + 1;
-  if (rescueDeliver(state, type)) { state.events.push({ type: 'delivered', item: type }); return; }
   const order = orderAt(state.planet || 0, state.orderIndex);
   if (type === order.item) {
-    state.money = (state.money || 0) + (ITEMS[type]?.value || 0);
-    state.orderProgress++;
+    const hits = state.hits || (state.hits = []);
+    hits.push(state.tick);
+    const from = state.tick - RATE_SECONDS * TICK_RATE;
+    while (hits.length && hits[0] <= from) hits.shift();
+    const rate = hits.length / RATE_SECONDS;
+    if (!order.rate || rate >= order.rate * RATE_TOLERANCE) {
+      state.orderProgress++;
+    } else if (!state.slowWarned) {
+      state.slowWarned = true;
+      state.events.push({ type: 'tooSlow', rate: order.rate });
+    }
     if (state.orderProgress >= order.amount) {
-      state.money += order.pay;
-      state.events.push({ type: 'orderDone', index: state.orderIndex, pay: order.pay });
+      const unlocked = [];
+      for (const u of order.unlocks || []) if (!state.unlocked.includes(u)) { state.unlocked.push(u); unlocked.push(u); }
+      state.events.push({ type: 'orderDone', index: state.orderIndex, unlocks: unlocked });
       // el último pedido de la tanda abre el despegue al siguiente planeta
       if (!state.planetDone && state.orderIndex === planetAt(state.planet || 0).orders.length - 1) {
         state.planetDone = true;
@@ -72,6 +82,8 @@ function deliver(state, type) {
       }
       state.orderIndex++;
       state.orderProgress = 0;
+      state.hits = [];
+      state.slowWarned = false;
       state.rev++;
     }
   } else {
@@ -87,8 +99,7 @@ function pushOut(state, e) {
 
 export function step(state) {
   state.tick++;
-  // una vez por segundo: ¿se ha quedado sin dinero para lo que pide el pedido?
-  if (state.tick % TICK_RATE === 0) checkRescue(state);
+  const lv = state.levels || {}; // sin niveles de momento: todo a nivel 1
   // Orden estable: por id de entidad, para que sea igual en todas las máquinas.
   const list = Object.values(state.entities).sort((a, b) => a.id - b.id);
 
@@ -99,7 +110,7 @@ export function step(state) {
         if (!nodeType) break;
         if (e.out.length < OUTPUT_BUFFER) {
           e.timer += DT;
-          const every = 1 / extractorRate(state.levels.extractor);
+          const every = 1 / extractorRate(lv.extractor);
           if (e.timer >= every - EPS) {
             e.timer -= every;
             e.out.push(nodeType);
@@ -118,7 +129,7 @@ export function step(state) {
         }
         if (e.busy) {
           e.timer += DT;
-          if (e.timer >= craftTime(e.kind, state.levels[e.kind]) - EPS) {
+          if (e.timer >= craftTime(e.kind, lv[e.kind]) - EPS) {
             e.busy = false;
             e.out.push(r.out);
           }
@@ -132,7 +143,7 @@ export function step(state) {
         // 1) el de delante intenta pasar a la siguiente casilla
         if (items[0].p >= 1 - EPS && tryInsert(state, e.x + DX[e.dir], e.y + DY[e.dir], items[0].type, e.dir)) items.shift();
         // 2) todos avanzan, respetando el hueco con el de delante
-        const spd = beltSpeed(state.levels.cinta) * DT;
+        const spd = beltSpeed(lv.cinta) * DT;
         for (let i = 0; i < items.length; i++) {
           const lim = i === 0 ? 1 : items[i - 1].p - BELT_SPACING;
           if (items[i].p < lim) items[i].p = Math.min(lim, items[i].p + spd);
@@ -140,7 +151,7 @@ export function step(state) {
         break;
       }
       case 'puente': {
-        const spd = beltSpeed(state.levels.cinta) * 2 * DT;
+        const spd = beltSpeed(lv.cinta) * 2 * DT;
         for (let l = 0; l < 2; l++) {
           const it = e.lanes[l];
           if (!it) continue;
@@ -151,7 +162,7 @@ export function step(state) {
       }
       case 'divisor': {
         if (!e.item) break;
-        e.item.p = Math.min(1, e.item.p + beltSpeed(state.levels.cinta) * 2 * DT);
+        e.item.p = Math.min(1, e.item.p + beltSpeed(lv.cinta) * 2 * DT);
         if (e.item.p < 1) break;
         // Izquierda, frente, derecha, empezando por donde tocó la última vez
         const outs = [(e.dir + 3) % 4, e.dir, (e.dir + 1) % 4];

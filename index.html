@@ -21,14 +21,11 @@
         <div class="order-planet" id="orderPlanet">Planeta 1</div>
         <div class="order-title" id="orderTitle">Pedido 1</div>
         <div class="order-count" id="orderCount">0 / 20 chatarra</div>
+        <div class="order-rate" id="orderRate" hidden></div>
         <div class="order-bar"><div class="order-fill" id="orderFill"></div></div>
         <button class="launch" id="launchBtn" hidden>Despegar al planeta 2</button>
       </div>
     </section>
-    <button class="wallet" id="wallet" title="Créditos Chatarrex · abrir catálogo">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9.5" fill="#ffd84a" stroke="#1f3b26" stroke-width="2"/><circle cx="12" cy="12" r="5.5" fill="none" stroke="#c99a1e" stroke-width="1.6"/><path d="M13.6 9.6a2.6 2.6 0 1 0 0 4.8" fill="none" stroke="#1f3b26" stroke-width="1.8" stroke-linecap="round"/></svg>
-      <span id="walletAmount">0 ₡</span>
-    </button>
     <section class="tutorial" id="tutorial" hidden aria-live="polite">
       <div class="tut-step" id="tutStep">Tutorial</div>
       <p class="tut-text" id="tutText"></p>
@@ -59,14 +56,14 @@
   <div class="scrim" id="scrim" hidden></div>
   <aside class="panel" id="panel" aria-label="Catálogo de construcción" aria-hidden="true">
     <div class="panel-head">
-      <h2>Catálogo <span class="panel-money" id="panelMoney"></span></h2>
+      <h2>Catálogo</h2>
       <button class="close" id="panelClose" aria-label="Cerrar catálogo">×</button>
     </div>
     <div class="panel-list" id="panelList"></div>
     <div class="panel-foot">
       <button class="chip" id="tutAgain">Repetir tutorial</button>
       <button class="chip chip-danger" id="resetBtn">Empezar partida nueva</button>
-      <p class="panel-note">Chatarrex solo paga lo que pide el pedido: cada pieza y un extra al completarlo. Se guarda solo.</p>
+      <p class="panel-note">Cada pedido cumplido desbloquea máquinas nuevas. Los grandes piden un ritmo mínimo: monta varias líneas. Se guarda solo.</p>
     </div>
   </aside>
 
