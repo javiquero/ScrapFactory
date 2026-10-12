@@ -30,7 +30,7 @@ export function beltPath(a, b, fallbackDir) {
   return cells;
 }
 
-export function attachInput(canvas, { renderer, getState, ctl, dispatch, onTapEntity, onTapEmpty, onLongPress, onBuildDone }) {
+export function attachInput(canvas, { renderer, getState, ctl, dispatch, onTapEntity, onTapEmpty, onLongPress, onBuildDone, onCopy }) {
   const pointers = new Map();
   let gesture = null;   // gesto de un dedo en curso
   let pinch = null;     // gesto de dos dedos en curso
@@ -44,6 +44,15 @@ export function attachInput(canvas, { renderer, getState, ctl, dispatch, onTapEn
   const local = (ev) => {
     const r = canvas.getBoundingClientRect();
     return { x: ev.clientX - r.left, y: ev.clientY - r.top };
+  };
+
+  // Fantasmas del trozo copiado con su esquina en `tile`
+  const blueprintGhosts = (tile) => {
+    const state = getState();
+    return (ctl.blueprint || []).map((it) => {
+      const x = tile.x + it.dx, y = tile.y + it.dy;
+      return { x, y, dir: it.dir, kind: it.kind, valid: inBounds(x, y) && !canPlace(state, it.kind, x, y) };
+    });
   };
 
   const ghostsFor = (cells, kind) => {
@@ -61,13 +70,15 @@ export function attachInput(canvas, { renderer, getState, ctl, dispatch, onTapEn
     if (t === 'cinta') {
       gesture.cells = beltPath(gesture.startTile, gesture.lastTile, ctl.dir);
       renderer.setGhosts(ghostsFor(gesture.cells, 'cinta'));
-    } else if (t === 'borrar') {
-      // Quitar por área: rectángulo entre donde empezaste y donde tienes el dedo
+    } else if (t === 'borrar' || t === 'copiar') {
+      // Quitar o copiar por área: rectángulo entre donde empezaste y donde tienes el dedo
       const a = gesture.startTile, b = gesture.lastTile;
       gesture.cells = [];
       for (let y = Math.min(a.y, b.y); y <= Math.max(a.y, b.y); y++) for (let x = Math.min(a.x, b.x); x <= Math.max(a.x, b.x); x++) gesture.cells.push({ x, y });
-      const full = ghostsFor(gesture.cells, 'borrar').filter((c) => c.valid);
-      renderer.setGhosts(full, { x0: Math.min(a.x, b.x), y0: Math.min(a.y, b.y), x1: Math.max(a.x, b.x), y1: Math.max(a.y, b.y) });
+      const full = ghostsFor(gesture.cells, 'borrar').filter((c) => c.valid).map((c) => ({ ...c, kind: t === 'copiar' ? 'marca' : 'borrar' }));
+      renderer.setGhosts(full, { x0: Math.min(a.x, b.x), y0: Math.min(a.y, b.y), x1: Math.max(a.x, b.x), y1: Math.max(a.y, b.y), color: t === 'copiar' ? 0x7fe3e0 : 0xff6b6b });
+    } else if (t === 'pegar') {
+      renderer.setGhosts(blueprintGhosts(gesture.lastTile));
     } else if (t !== 'mano') {
       renderer.setGhosts(ghostsFor(gesture.cells.map((c) => ({ ...c, dir: ctl.dir })), t));
     }
@@ -94,7 +105,7 @@ export function attachInput(canvas, { renderer, getState, ctl, dispatch, onTapEn
     gesture = g;
     cancelPress();
     // Mantener pulsado un edificio: menú de girar / quitar
-    if (ctl.tool !== 'borrar' && entityAt(tile)) {
+    if (ctl.tool !== 'borrar' && ctl.tool !== 'copiar' && ctl.tool !== 'pegar' && entityAt(tile)) {
       pressTimer = setTimeout(() => {
         if (gesture !== g || g.moved || pinchHappened) return;
         g.long = true;
@@ -110,7 +121,9 @@ export function attachInput(canvas, { renderer, getState, ctl, dispatch, onTapEn
     const p = local(ev);
     if (!pointers.has(ev.pointerId)) {
       // ratón sin pulsar: enseña dónde caería el edificio
-      if (ev.pointerType === 'mouse' && ctl.tool !== 'mano') {
+      if (ev.pointerType === 'mouse' && ctl.tool === 'pegar') {
+        renderer.setGhosts(blueprintGhosts(renderer.screenToTile(p.x, p.y)));
+      } else if (ev.pointerType === 'mouse' && ctl.tool !== 'mano' && ctl.tool !== 'copiar') {
         const t = renderer.screenToTile(p.x, p.y);
         const kind = ctl.tool === 'borrar' ? 'borrar' : ctl.tool;
         renderer.setGhosts(ghostsFor([{ ...t, dir: ctl.dir }], kind));
@@ -141,7 +154,7 @@ export function attachInput(canvas, { renderer, getState, ctl, dispatch, onTapEn
     const tile = renderer.screenToTile(p.x, p.y);
     if (tile.x === gesture.lastTile.x && tile.y === gesture.lastTile.y) return;
     gesture.lastTile = tile;
-    if (ctl.tool !== 'cinta' && ctl.tool !== 'borrar') {
+    if (ctl.tool !== 'cinta' && ctl.tool !== 'borrar' && ctl.tool !== 'copiar' && ctl.tool !== 'pegar') {
       // modo "pintar": cada casilla nueva que pisas
       const k = key(tile.x, tile.y);
       if (!gesture.seen.has(k)) { gesture.seen.add(k); gesture.cells.push(tile); }
@@ -177,7 +190,7 @@ export function attachInput(canvas, { renderer, getState, ctl, dispatch, onTapEn
     // pero una máquina tocada sobre una cinta la sustituye
     const there = entityAt(g.startTile);
     const replaces = there && t !== 'cinta' && t !== 'borrar' && t !== 'mano' && replaceable(there);
-    if (tap && t !== 'borrar' && there && !replaces) {
+    if (tap && t !== 'borrar' && t !== 'copiar' && t !== 'pegar' && there && !replaces) {
       renderer.setGhosts([]);
       onTapEntity(g.startTile);
       if (t !== 'mano') onBuildDone();
@@ -189,6 +202,13 @@ export function attachInput(canvas, { renderer, getState, ctl, dispatch, onTapEn
       dispatch({ type: 'placeMany', kind: 'cinta', cells: g.cells.map(({ x, y, dir }) => ({ x, y, dir })) }, g.cells.length === 1);
     } else if (t === 'borrar') {
       dispatch({ type: 'remove', cells: g.cells.map(({ x, y }) => ({ x, y })) }, g.cells.length === 1);
+    } else if (t === 'copiar') {
+      renderer.setGhosts([]);
+      onCopy(g.cells);
+      return; // pasa a la herramienta de pegar
+    } else if (t === 'pegar') {
+      const at = g.lastTile;
+      dispatch({ type: 'placeBlueprint', x: at.x, y: at.y, items: ctl.blueprint || [] }, true);
     } else {
       dispatch({ type: 'placeMany', kind: t, cells: g.cells.map(({ x, y }) => ({ x, y, dir: ctl.dir })) }, g.cells.length === 1);
     }

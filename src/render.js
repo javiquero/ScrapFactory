@@ -6,6 +6,7 @@ import { rng, key } from './world.js';
 import { beltShape, itemPos } from './beltShapes.js';
 import { UPRIGHT, HAS_CHUTE } from './sprites/machines.js';
 import { NODE_PIECES, NODE_GROUND } from './sprites/terrain.js';
+import { OBSTACLE_KEYS } from './sprites/obstacles.js';
 import { MACHINE_ANCHOR_Y, TOP } from './sprites/common.js';
 
 const TALL_DECOR = ['arbol', 'arbol2', 'arbusto'];
@@ -14,6 +15,7 @@ const CHPX = CH * TILE;
 
 const T = TILE;
 const HALF = T / 2;
+const divMask = (e) => (e.outs || [true, true, true]).reduce((m, o, i) => m | (o ? 1 << i : 0), 0);
 
 export class Renderer {
   constructor(app, textures) {
@@ -153,6 +155,16 @@ export class Renderer {
     }
     pieces.sort((a, b) => a.y - b.y).forEach((sp) => { chunkAt(sp.x, sp.y).addChild(sp); this.junk.push(sp); });
 
+    // obstáculos: una pieza por casilla, de arriba abajo para que se solapen bien
+    const okeys = OBSTACLE_KEYS[Math.min(state.planet || 0, OBSTACLE_KEYS.length - 1)];
+    const obsList = Object.entries(state.world.obstacles || {}).map(([k, v]) => [...k.split(',').map(Number), v]).sort((a, b) => a[1] - b[1] || a[0] - b[0]);
+    for (const [x, y, v] of obsList) {
+      const sp = new Sprite(this.tx[okeys[v % okeys.length]]);
+      sp.anchor.set(0.5);
+      sp.position.set(x * T + HALF, y * T + HALF);
+      chunkAt(sp.x, sp.y).addChild(sp);
+    }
+
     // decoración: la plana va en el trozo; árboles y arbustos, ordenados con las máquinas
     for (const d of state.world.decor) {
       const sp = new Sprite(this.tx[d.kind]);
@@ -229,6 +241,7 @@ export class Renderer {
         // hacia arriba la rampa quedaría en medio de la máquina: se sube por encima
         s.chute.y = e.dir === 3 ? -TOP + 8 : 0;
       }
+      if (e.kind === 'divisor') s.texture = this.textureFor(e); // salidas abiertas/cerradas
       if (!upright) s.rotation = e.kind === 'puente' ? 0 : (e.dir * Math.PI) / 2; // el puente no se gira: sirve en las dos direcciones
       if (e.kind === 'cinta' || e.kind === 'divisor' || e.kind === 'puente') this.carriers.push([e, s, e.kind === 'cinta' ? beltShape(state, e) : null]);
       else this.machines.push([e, s]);
@@ -246,6 +259,7 @@ export class Renderer {
   }
 
   textureFor(e) {
+    if (e.kind === 'divisor') return this.tx[`divisor_${divMask(e)}`];
     if (e.kind === 'cinta') return this.tx[`belt${this.state.levels?.cinta || 1}_0`];
     return this.tx[e.kind];
   }
@@ -311,14 +325,14 @@ export class Renderer {
     for (const g of list) {
       let s = this.ghostPool[i];
       if (!s) { s = new Sprite(); s.anchor.set(0.5); this.ghostLayer.addChild(s); this.ghostPool.push(s); }
-      s.texture = g.kind === 'cinta' ? this.tx.belt0 : g.kind === 'borrar' ? this.tx.piedra : this.tx[g.kind];
+      s.texture = g.kind === 'cinta' ? this.tx.belt0 : (g.kind === 'borrar' || g.kind === 'marca') ? this.tx.piedra : this.tx[g.kind];
       s.position.set(g.x * T + HALF, g.y * T + HALF);
       const upright = UPRIGHT.includes(g.kind);
       s.anchor.set(0.5, upright ? MACHINE_ANCHOR_Y : 0.5);
       s.rotation = upright ? 0 : (g.dir * Math.PI) / 2;
       s.alpha = 0.6;
       s.tint = g.valid ? 0xffffff : 0xff6b6b;
-      s.visible = g.kind !== 'borrar';
+      s.visible = g.kind !== 'borrar' && g.kind !== 'marca';
       // rampa de salida del fantasma, para ver hacia dónde saldrá
       let c = this.ghostChutes[i];
       if (!c) { c = new Sprite(this.tx.chute); c.anchor.set(0.5); this.ghostLayer.addChildAt(c, 0); this.ghostChutes.push(c); }
@@ -337,12 +351,13 @@ export class Renderer {
     if (area) {
       // zona que se va a borrar
       const x = area.x0 * T, y = area.y0 * T, w = (area.x1 - area.x0 + 1) * T, hh = (area.y1 - area.y0 + 1) * T;
-      h.roundRect(x + 1, y + 1, w - 2, hh - 2, 12).fill({ color: 0xff6b6b, alpha: 0.16 }).stroke({ width: 3, color: 0xff6b6b, alpha: 0.9 });
+      const col = area.color ?? 0xff6b6b;
+      h.roundRect(x + 1, y + 1, w - 2, hh - 2, 12).fill({ color: col, alpha: 0.16 }).stroke({ width: 3, color: col, alpha: 0.9 });
     }
     for (const g of list) {
-      const color = g.kind === 'borrar' ? 0xff6b6b : g.valid ? 0xffd84a : 0xff6b6b;
+      const color = g.kind === 'borrar' ? 0xff6b6b : g.kind === 'marca' ? 0x7fe3e0 : g.valid ? 0xffd84a : 0xff6b6b;
       h.roundRect(g.x * T + 2, g.y * T + 2, T - 4, T - 4, 10).stroke({ width: 3, color, alpha: 0.95 });
-      if (g.kind === 'borrar') h.roundRect(g.x * T + 6, g.y * T + 6, T - 12, T - 12, 8).fill({ color: 0xff6b6b, alpha: 0.28 });
+      if (g.kind === 'borrar' || g.kind === 'marca') h.roundRect(g.x * T + 6, g.y * T + 6, T - 12, T - 12, 8).fill({ color, alpha: 0.28 });
     }
   }
 

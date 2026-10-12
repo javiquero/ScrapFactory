@@ -17,8 +17,11 @@ export function feedsInto(n, toward, state = null, depth = 0) {
     case 'cinta':
     case 'extractor':
       return n.dir === toward;
-    case 'divisor':
-      return toward !== opposite(n.dir); // sale por izquierda, frente y derecha
+    case 'divisor': {
+      // sale por izquierda, frente y derecha (las que estén abiertas)
+      const i = [(n.dir + 3) % 4, n.dir, (n.dir + 1) % 4].indexOf(toward);
+      return i >= 0 && (n.outs ? n.outs[i] : true);
+    }
     default:
       return !!BUILDINGS[n.kind]?.recipe && n.dir === toward; // máquinas con receta
   }

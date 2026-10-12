@@ -33,6 +33,30 @@
     </section>
   </header>
 
+  <div class="corner" id="corner">
+    <button class="round" id="soundBtn" title="Sonido" aria-label="Sonido"></button>
+    <button class="round" id="statsBtn" title="Estadísticas" aria-label="Estadísticas de producción">
+      <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M6 26h20M9 22v-6M15 22V9M21 22v-9M27 22v-4" /></svg>
+    </button>
+  </div>
+
+  <section class="stats" id="stats" hidden aria-label="Estadísticas de producción">
+    <div class="panel-head"><h2>Producción</h2><button class="close" id="statsClose" aria-label="Cerrar">×</button></div>
+    <div class="stats-body" id="statsBody"></div>
+  </section>
+
+  <section class="title" id="title" aria-label="Pantalla principal">
+    <div class="title-card">
+      <div class="title-stamp">Chatarrex S.A. presenta</div>
+      <h1>Scrap<br>Factory</h1>
+      <p class="title-sub">Fábricas en planetas-vertedero. Sin sueldo, pero con maquinaria.</p>
+      <div class="title-save" id="titleSave" hidden></div>
+      <button class="big" id="continueBtn" hidden>Continuar</button>
+      <button class="big" id="newBtn">Partida nueva</button>
+      <button class="title-sound" id="titleSound"></button>
+    </div>
+  </section>
+
   <div class="memo" id="memo" role="status" hidden>
     <div class="memo-from">Comunicado de Chatarrex S.A.</div>
     <p class="memo-text" id="memoText"></p>
@@ -49,6 +73,7 @@
     <button class="chip" id="inspectRotate">Girar</button>
     <button class="chip chip-danger" id="inspectRemove">Quitar</button>
     <button class="close" id="inspectClose" aria-label="Cerrar">×</button>
+    <div class="inspect-outs" id="inspectOuts" hidden></div>
   </section>
 
   <nav class="bar" id="bar" aria-label="Herramientas"></nav>

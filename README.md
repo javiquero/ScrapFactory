@@ -11,9 +11,13 @@ Inspirado en Builderment, pero en el navegador: funciona igual en el móvil que 
 - **Cinta**: arrastra el dedo desde donde empieza hasta donde acaba; se traza sola en forma de L.
 - **Edificios**: tócalos sobre el mapa, o arrastra para colocar varios seguidos. Encima de una cinta, la sustituyen. Al soltar el dedo vuelves a la mano; lo elegido sigue en la barra para repetir.
 - **Cruzar cintas**: el Puente (se desbloquea en el pedido 2). Con él, si trazas una cinta que atraviesa otra en perpendicular, el puente se pone solo; una pasa por encima de la otra sin mezclarse. También se puede colocar a mano en el cruce.
+- **Copiar / Pegar**: con Copiar arrastra para marcar un trozo de fábrica; el botón pasa a Pegar y el siguiente toque (o arrastre y soltar) lo estampa con su esquina ahí. Lo que no quepa se salta. Tocar Pegar otra vez vuelve a Copiar.
+- **Divisor**: mantenlo pulsado y en su ficha abre o cierra cada salida (izquierda, frente, derecha).
 - **Quitar**: toca un edificio, o arrastra para marcar un rectángulo y quitar todo lo que haya dentro.
 - **Deshacer**: revierte lo último que construiste, giraste o quitaste (hasta 50 pasos; también `Ctrl+Z`).
 - **Dos dedos**: mover y hacer zoom con cualquier herramienta. En ordenador, rueda del ratón para el zoom y `R` para cambiar la orientación de lo que vas a colocar.
+- **Pantalla principal**: Continuar o Partida nueva; la partida espera en pausa detrás. Arriba a la derecha: sonido y estadísticas de producción (qué llega a la nave por segundo y cuántas máquinas trabajan).
+- **Mapa**: obstáculos (rocas, charcas, montañas de neumáticos…) por los que no se puede construir; más cuanto más lejos el planeta. Nunca encierran un recurso.
 - **Tutorial**: sale solo en partidas nuevas (moverse, extraer, girar, cintas y los dos primeros pedidos). Se puede repetir desde el catálogo.
 - **Nave**: 2×2 casillas, fija. Recibe por los cuatro lados (dos entradas por lado). Tocarla muestra lo enviado.
 - **Más**: catálogo con todo lo desbloqueado (y cuándo se desbloquea lo demás). Lo que eliges pasa a la barra de abajo.

@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Muestrario de obstáculos</title>
+  <style>
+    body { margin: 0; background: #2e2822; font-family: system-ui, sans-serif; }
+    p { margin: 8px 12px; color: #f1ede6; }
+  </style>
+</head>
+<body>
+  <p>Obstáculos por planeta: un grupo como en el juego y las 3 piezas sueltas. <code>?scale=1.5&amp;planet=3</code></p>
+  <script type="module">
+    import { Application, Sprite, Text, Container, Graphics } from '../vendor/pixi.min.mjs';
+    import { OBSTACLE_KEYS, makeObstacles } from '../src/sprites/obstacles.js';
+
+    const params = new URLSearchParams(location.search);
+    const scale = Number(params.get('scale') || 1.5);
+    const only = params.get('planet');
+    const GROUND = [0x8cc56a, 0x84c79a, 0xc9a36b, 0x9d93b5, 0x3f7f86, 0xa8a25a, 0xe6c49a, 0xdfeaf2];
+    const NAMES = ['El Vertedero', 'Los Cristales', 'La Gomera', 'Silicon Barranco', 'El Musgal', 'La Ciénaga', 'Las Dunas Raras', 'El Congelador'];
+    // Grupo de casillas: 0/1/2 = pieza a/b/c, -1 = suelo libre
+    const GROUP = [
+      [-1, 1, 0, -1],
+      [0, 2, 1, 0],
+      [1, 0, 0, 2],
+      [-1, 2, 1, -1],
+    ];
+
+    const T = 64 * scale;
+    const rowW = (4 + 0.5 + 3 * 1.25) * T + 24;
+    const rowH = 4 * T + 40;
+    const planets = only !== null ? [Number(only)] : [0, 1, 2, 3, 4, 5, 6, 7];
+
+    const app = new Application();
+    await app.init({ width: rowW, height: rowH * planets.length, background: '#2e2822', antialias: true, resolution: 1 });
+    document.body.appendChild(app.canvas);
+    const t = {};
+    makeObstacles(app.renderer, t);
+
+    planets.forEach((p, row) => {
+      const c = new Container();
+      c.y = row * rowH;
+      app.stage.addChild(c);
+      c.addChild(new Graphics().rect(0, 0, rowW, rowH - 4).fill(GROUND[p]));
+      const label = new Text({ text: `${p}. ${NAMES[p]}`, style: { fontSize: 14, fill: p === 4 ? 0xffffff : 0x2e2822, fontWeight: 'bold' } });
+      label.x = 8; label.y = 6;
+      c.addChild(label);
+      const keys = OBSTACLE_KEYS[p];
+      GROUP.forEach((r, j) => r.forEach((k, i) => {
+        if (k < 0) return;
+        const s = new Sprite(t[keys[k]]);
+        s.scale.set(scale);
+        s.x = 8 + i * T; s.y = 30 + j * T;
+        c.addChild(s);
+      }));
+      keys.forEach((key, i) => {
+        const s = new Sprite(t[key]);
+        s.scale.set(scale);
+        s.x = 8 + 4.5 * T + i * 1.25 * T; s.y = 30 + 1.2 * T;
+        c.addChild(s);
+        const lb = new Text({ text: key, style: { fontSize: 12, fill: p === 4 ? 0xffffff : 0x2e2822 } });
+        lb.x = s.x; lb.y = s.y + T + 2;
+        c.addChild(lb);
+      });
+    });
+    window.__ready = true;
+  </script>
+</body>
+</html>

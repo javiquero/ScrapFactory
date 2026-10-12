@@ -115,13 +115,29 @@ export function makeBelts(renderer, t) {
     for (const y of [10, 32, 54]) { g.circle(15, y, 1.5).fill(C.BUTTER_D); g.circle(49, y, 1.5).fill(C.BUTTER_D); }
   }, T, T, 4);
 
-  t.divisor = tex(renderer, (g) => {
-    g.roundRect(6, 10, 52, 52, 16).fill({ color: C.SHADOW, alpha: 0.22 });
-    g.roundRect(6, 6, 52, 52, 16).fill(C.BELT).stroke({ width: 3, color: C.INK });
-    g.circle(HALF, HALF, 15).fill(C.BUTTER).stroke({ width: 2.5, color: C.INK });
-    g.poly([HALF + 10, HALF - 6, T - 9, HALF, HALF + 10, HALF + 6]).fill(C.BUTTER).stroke({ width: 2, color: C.INK });
-    g.poly([HALF - 6, HALF - 10, HALF, 9, HALF + 6, HALF - 10]).fill(C.BUTTER).stroke({ width: 2, color: C.INK });
-    g.poly([HALF - 6, HALF + 10, HALF, T - 9, HALF + 6, HALF + 10]).fill(C.BUTTER).stroke({ width: 2, color: C.INK });
-    g.circle(HALF, HALF, 5).fill(C.INK);
-  });
+  // Divisor: una textura por combinación de salidas abiertas (bit 0 izquierda = arriba,
+  // bit 1 frente = derecha, bit 2 derecha = abajo, dibujado mirando a la derecha).
+  // Las salidas cerradas llevan una trampilla con rayas.
+  const arm = (g, rot, open) => {
+    const c = Math.cos(rot), s = Math.sin(rot);
+    const P = (x, y) => [HALF + x * c - y * s, HALF + x * s + y * c];
+    if (open) {
+      g.poly([...P(10, -6), ...P(23, 0), ...P(10, 6)]).fill(C.BUTTER).stroke({ width: 2, color: C.INK });
+    } else {
+      g.poly([...P(14, -8), ...P(21, -8), ...P(21, 8), ...P(14, 8)]).fill(0xb8495a).stroke({ width: 2, color: C.INK });
+      g.moveTo(...P(15, -5)).lineTo(...P(20, 5)).stroke({ width: 1.6, color: 0xffffff, alpha: 0.8 });
+    }
+  };
+  for (let m = 1; m < 8; m++) {
+    t[`divisor_${m}`] = tex(renderer, (g) => {
+      g.roundRect(6, 10, 52, 52, 16).fill({ color: C.SHADOW, alpha: 0.22 });
+      g.roundRect(6, 6, 52, 52, 16).fill(C.BELT).stroke({ width: 3, color: C.INK });
+      g.circle(HALF, HALF, 15).fill(C.BUTTER).stroke({ width: 2.5, color: C.INK });
+      arm(g, -Math.PI / 2, m & 1);
+      arm(g, 0, m & 2);
+      arm(g, Math.PI / 2, m & 4);
+      g.circle(HALF, HALF, 5).fill(C.INK);
+    });
+  }
+  t.divisor = t.divisor_7;
 }

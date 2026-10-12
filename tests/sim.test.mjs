@@ -1,8 +1,8 @@
 // Pruebas de la simulación sin navegador: node tests/sim.test.mjs
 import assert from 'node:assert/strict';
-import { createGame, applyAction, serialize, deserialize, currentOrder, isShip } from '../src/state.js';
+import { createGame as createGame0, applyAction, serialize, deserialize, currentOrder, isShip } from '../src/state.js';
 import { step, tryInsert } from '../src/sim.js';
-import { key } from '../src/world.js';
+import { key, generateWorld } from '../src/world.js';
 import { TICK_RATE, beltRate, extractorRate, PLANETS, BUILDINGS, ITEMS, NODES, LEVEL_MULT, MAKER, STARTING_UNLOCKS, unlockedBy } from '../src/defs.js';
 
 // Máquinas que hacen falta para fabricar `item` (toda la cadena)
@@ -14,6 +14,9 @@ function machinesFor(item, acc = new Set()) {
   return acc;
 }
 import { beltShape } from '../src/beltShapes.js';
+
+// Las pruebas montan sus líneas donde quieren: mapa sin obstáculos (salvo la prueba de obstáculos)
+const createGame = (seed) => { const s = createGame0(seed); s.world.obstacles = {}; return s; };
 
 const run = (state, seconds) => { for (let i = 0; i < seconds * TICK_RATE; i++) step(state); };
 
@@ -525,6 +528,81 @@ for (const lvl of [1]) {   // sin niveles de momento
   }
   assert.equal(s.planet, PLANETS.length - 1);
   console.log('✓ viaje del planeta 1 al', PLANETS.length, 'con un recurso nuevo en cada uno');
+}
+
+// 28) Obstáculos: no se construye encima, nunca encierran un recurso, y el mapa es el mismo al cargar
+{
+  const s = createGame0(4242);
+  const obs = Object.keys(s.world.obstacles);
+  assert.ok(obs.length > 20, 'hay obstáculos: ' + obs.length);
+  const [ox, oy] = obs[0].split(',').map(Number);
+  assert.equal(applyAction(s, { type: 'place', kind: 'cinta', x: ox, y: oy, dir: 0 }).reason, 'Ahí hay un obstáculo');
+  for (let p = 0; p < PLANETS.length; p++) {
+    const w = generateWorld(9000 + p, p, 2);
+    // desde la nave se llega a todas las casillas de recurso sin cruzar obstáculos
+    const seen = new Set([key(w.spawn.x, w.spawn.y)]);
+    const q = [[w.spawn.x, w.spawn.y]];
+    while (q.length) {
+      const [x, y] = q.pop();
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = x + dx, ny = y + dy, k = key(nx, ny);
+        if (nx < 0 || ny < 0 || nx >= 64 || ny >= 64 || seen.has(k) || w.obstacles[k] !== undefined) continue;
+        seen.add(k); q.push([nx, ny]);
+      }
+    }
+    for (const k in w.nodes) assert.ok(seen.has(k), `planeta ${p + 1}: el recurso en ${k} queda encerrado`);
+    for (const k in w.nodes) assert.equal(w.obstacles[k], undefined, 'ningún obstáculo encima de un recurso');
+  }
+  const back = deserialize(serialize(s));
+  assert.equal(JSON.stringify(back.world.obstacles), JSON.stringify(s.world.obstacles), 'mismo mapa al cargar');
+  const oldMap = generateWorld(4242, 0, 1);
+  assert.equal(Object.keys(oldMap.obstacles).length, 0, 'las partidas de antes siguen sin obstáculos');
+  console.log('✓ obstáculos:', obs.length, 'en el planeta 1, ningún recurso encerrado en los 8 planetas');
+}
+
+// 29) Divisor con salidas que se abren y cierran
+{
+  const s = createGame(95);
+  own(s, 'divisor');
+  const X = 20, Y = 20;
+  for (let x = X - 3; x <= X + 4; x++) for (let y = Y - 3; y <= Y + 3; y++) { delete s.world.nodes[key(x, y)]; delete s.entities[key(x, y)]; }
+  s.world.nodes[key(X - 1, Y)] = 'chatarra';
+  applyAction(s, { type: 'place', kind: 'extractor', x: X - 1, y: Y, dir: 0 });
+  applyAction(s, { type: 'place', kind: 'divisor', x: X, y: Y, dir: 0 });
+  // tres cintas de salida (arriba, delante, abajo)
+  applyAction(s, { type: 'place', kind: 'cinta', x: X, y: Y - 1, dir: 3 });
+  applyAction(s, { type: 'place', kind: 'cinta', x: X + 1, y: Y, dir: 0 });
+  applyAction(s, { type: 'place', kind: 'cinta', x: X, y: Y + 1, dir: 1 });
+  assert.equal(applyAction(s, { type: 'setOutputs', x: X, y: Y, outs: [false, false, false] }).ok, false, 'al menos una abierta');
+  const r = applyAction(s, { type: 'setOutputs', x: X, y: Y, outs: [false, true, false] });
+  assert.ok(r.ok && r.undo, 'se puede deshacer');
+  run(s, 3);
+  const n = (x, y) => s.entities[key(x, y)].items.length;
+  assert.ok(n(X + 1, Y) > 0, 'sale por delante');
+  assert.equal(n(X, Y - 1) + n(X, Y + 1), 0, 'por los lados cerrados no sale nada');
+  applyAction(s, r.undo);
+  assert.deepEqual(s.entities[key(X, Y)].outs, [true, true, true], 'deshacer vuelve a abrirlas');
+  console.log('✓ divisor con salidas abiertas y cerradas');
+}
+
+// 30) Copiar y pegar un trozo de fábrica (una sola acción, se puede deshacer)
+{
+  const s = createGame(96);
+  own(s, 'prensa', 'divisor');
+  const X = 10, Y = 10;
+  for (let x = X - 1; x <= X + 12; x++) for (let y = Y - 1; y <= Y + 3; y++) { delete s.world.nodes[key(x, y)]; delete s.entities[key(x, y)]; }
+  const items = [
+    { dx: 0, dy: 0, kind: 'cinta', dir: 0 }, { dx: 1, dy: 0, kind: 'prensa', dir: 0 },
+    { dx: 2, dy: 0, kind: 'divisor', dir: 0, outs: [true, false, true] }, { dx: 0, dy: 1, kind: 'extractor', dir: 0 },
+  ];
+  const r = applyAction(s, JSON.parse(JSON.stringify({ type: 'placeBlueprint', x: X + 6, y: Y, items })));
+  assert.ok(r.ok);
+  assert.equal(r.placed, 3, 'el extractor no cabe fuera de un recurso: se salta');
+  assert.equal(s.entities[key(X + 7, Y)].kind, 'prensa');
+  assert.deepEqual(s.entities[key(X + 8, Y)].outs, [true, false, true], 'el divisor conserva sus salidas');
+  applyAction(s, r.undo);
+  assert.equal(Object.keys(s.entities).length, 0, 'deshacer quita todo lo pegado');
+  console.log('✓ copiar y pegar trozos de fábrica');
 }
 
 console.log('Todo OK');

@@ -13,13 +13,16 @@ import { generateWorld, key } from './world.js';
 
 export const SAVE_VERSION = 6;
 
+export const WORLD_GEN = 2; // versión del generador de mapas (2 = con obstáculos)
+
 export function createGame(seed = Math.floor(Math.random() * 1e9)) {
-  const world = generateWorld(seed, 0);
+  const world = generateWorld(seed, 0, WORLD_GEN);
   const state = {
     version: SAVE_VERSION,
     seed,
     planet: 0,                // índice del planeta actual (ver PLANETS)
     planetDone: false,        // ya se puede despegar al siguiente
+    worldGen: WORLD_GEN,      // las partidas anteriores a los obstáculos siguen con su mapa
     tick: 0,
     nextId: 1,
     entities: {},             // "x,y" -> entidad
@@ -63,7 +66,7 @@ function addEntity(state, kind, x, y, dir) {
   const e = { id: state.nextId++, kind, x, y, dir };
   if (kind === 'cinta') e.items = [];      // de delante (p alto) a detrás
   if (kind === 'divisor') e.item = null;
-  if (kind === 'divisor') e.rr = 0;
+  if (kind === 'divisor') { e.rr = 0; e.outs = [true, true, true]; } // salidas: izquierda, frente, derecha
   if (kind === 'puente') e.lanes = [null, null]; // [por debajo (horizontal), por encima (vertical)]
   if (kind === 'extractor') { e.timer = 0; e.out = []; }
   if (BUILDINGS[kind]?.recipe) { e.inv = {}; e.out = []; e.timer = 0; e.busy = false; }
@@ -84,6 +87,7 @@ export function canPlace(state, kind, x, y) {
   if (!state.unlocked.includes(kind)) return 'Aún no está desbloqueado';
   if (!inBounds(x, y)) return 'Fuera del mapa';
   if (isShip(state, x, y)) return 'Ahí está tu nave';
+  if (state.world.obstacles?.[key(x, y)] !== undefined) return 'Ahí hay un obstáculo';
   const existing = state.entities[key(x, y)];
   const node = state.world.nodes[key(x, y)];
   if (BUILDINGS[kind].onNode && !node) return 'Tiene que ir sobre un recurso';
@@ -103,8 +107,9 @@ export function canPlace(state, kind, x, y) {
 // Acciones de construcción que se pueden deshacer, y las casillas que tocan
 function touched(action) {
   switch (action.type) {
-    case 'place': case 'rotate': return [{ x: action.x, y: action.y }];
+    case 'place': case 'rotate': case 'setOutputs': return [{ x: action.x, y: action.y }];
     case 'placeMany': case 'remove': return action.cells;
+    case 'placeBlueprint': return action.items.map((it) => ({ x: action.x + it.dx, y: action.y + it.dy }));
     default: return null;
   }
 }
@@ -148,6 +153,19 @@ function apply(state, action) {
       }
       return placed ? { ok: true, placed } : { ok: false, reason: 'Nada que colocar' };
     }
+    case 'placeBlueprint': {
+      // Pegar un trozo de fábrica copiado: cada pieza en (x+dx, y+dy). Lo que no
+      // quepa (obstáculo, otra máquina, extractor sin recurso...) se salta.
+      let placed = 0;
+      for (const it of action.items) {
+        const x = action.x + it.dx, y = action.y + it.dy;
+        if (!placeOne(state, it.kind, x, y, it.dir).ok) continue;
+        placed++;
+        const e = state.entities[key(x, y)];
+        if (it.outs && e?.kind === 'divisor') e.outs = it.outs.map(Boolean);
+      }
+      return placed ? { ok: true, placed } : { ok: false, reason: 'Ahí no cabe nada del trozo copiado' };
+    }
     case 'remove': {
       let removed = 0;
       for (const c of action.cells) {
@@ -168,7 +186,7 @@ function apply(state, action) {
       state.seed = nextSeed(state.seed, p);
       state.planet = p;
       state.planetDone = false;
-      state.world = generateWorld(state.seed, p);
+      state.world = generateWorld(state.seed, p, state.worldGen || 1);
       state.entities = {};
       state.ship = { x: state.world.spawn.x, y: state.world.spawn.y };
       state.orderIndex = 0;
@@ -186,10 +204,20 @@ function apply(state, action) {
         const now = state.entities[k];
         if (!c.e) { delete state.entities[k]; continue; }
         if (isShip(state, c.x, c.y)) continue;
-        if (now && now.id === c.e.id) { now.dir = c.e.dir; resettle(now); continue; }
+        if (now && now.id === c.e.id) { now.dir = c.e.dir; if (c.e.outs) now.outs = [...c.e.outs]; resettle(now); continue; }
         state.entities[k] = clone(c.e);
         if (c.e.id >= state.nextId) state.nextId = c.e.id + 1;
       }
+      state.rev++;
+      return { ok: true };
+    }
+    case 'setOutputs': {
+      // Divisor: qué salidas están abiertas (izquierda, frente, derecha). Al menos una.
+      const e = state.entities[key(action.x, action.y)];
+      if (!e || e.kind !== 'divisor') return { ok: false, reason: 'Eso no es un divisor' };
+      const outs = (action.outs || []).slice(0, 3).map(Boolean);
+      if (outs.length !== 3 || !outs.some(Boolean)) return { ok: false, reason: 'Deja al menos una salida abierta' };
+      e.outs = outs;
       state.rev++;
       return { ok: true };
     }
@@ -247,7 +275,7 @@ export function serialize(state) {
 
 export function deserialize(json) {
   const data = migrate(JSON.parse(json));
-  const world = generateWorld(data.seed, data.planet || 0);
+  const world = generateWorld(data.seed, data.planet || 0, data.worldGen || 1);
   return { ...data, world, events: [], rev: (data.rev || 0) + 1 };
 }
 

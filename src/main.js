@@ -11,6 +11,7 @@ import { UI } from './ui.js';
 import { key } from './world.js';
 import * as msg from './messages.js';
 import { Tutorial } from './tutorial.js';
+import { sfx } from './audio.js';
 
 const SAVE_KEY = 'scrapfactory.save.v2';
 const CAM_KEY = 'scrapfactory.cam.v1';
@@ -63,9 +64,13 @@ async function boot() {
   // Único punto por el que cambia la partida. En multijugador, aquí se enviará
   // la acción al servidor y se aplicarán también las que lleguen de los demás.
   const undoStack = [];
+  let lastAction = performance.now();
+  const SOUND = { place: 'place', placeMany: 'place', placeBlueprint: 'place', remove: 'remove', rotate: 'rotate', setOutputs: 'tap', nextPlanet: 'launch' };
   function dispatch(action, explain = false) {
     const res = applyAction(state, action);
-    if (!res.ok && explain) ui.hint(res.reason);
+    lastAction = performance.now();
+    if (!res.ok && explain) { ui.hint(res.reason); sfx.play('error'); }
+    if (res.ok) sfx.play(action.kind === 'cinta' ? 'belt' : SOUND[action.type] || 'tap');
     if (res.ok) ui.refreshInspect(state);
     if (res.ok && res.undo) {
       undoStack.push(res.undo);
@@ -80,6 +85,7 @@ async function boot() {
     ui.setUndo(undoStack.length > 0);
     if (!a) return;
     applyAction(state, a);
+    sfx.play('undo');
     ui.hideInspect();
     renderer.setSelected(null);
     ui.hint('Deshecho');
@@ -101,6 +107,8 @@ async function boot() {
         cinta: 'Arrastra para trazar la cinta',
         extractor: 'Tócalo encima de un recurso',
         borrar: 'Toca o arrastra para quitar',
+        copiar: 'Arrastra para marcar el trozo que quieres copiar',
+        pegar: 'Toca donde quieras pegarlo (esquina de arriba a la izquierda)',
       };
       if (tips[tool]) ui.hint(tips[tool]);
     }
@@ -111,6 +119,14 @@ async function boot() {
     ctl,
     onSelectTool: selectTool,
     onUndo: undo,
+    onToggleOut: (i) => {
+      const e = ui.inspected;
+      if (!e || e.kind !== 'divisor') return;
+      const outs = [...(e.outs || [true, true, true])];
+      outs[i] = !outs[i];
+      dispatch({ type: 'setOutputs', x: e.x, y: e.y, outs }, true);
+      ui.renderOuts(e);
+    },
     onTutorial: (what) => {
       if (what === 'again') { tut.start(); tut.flags.panned = 0; panBase = renderer.panned || 0; ui.renderBar(state); }
       else { tut.stop(); ui.renderBar(state); }
@@ -164,6 +180,22 @@ async function boot() {
     },
     onTapEmpty: () => { ui.hideInspect(); renderer.setSelected(null); },
     onBuildDone: () => selectTool('mano'),
+    onCopy: (cells) => {
+      // guarda lo que hay en el rectángulo, con posiciones relativas a su esquina
+      const x0 = Math.min(...cells.map((c) => c.x)), y0 = Math.min(...cells.map((c) => c.y));
+      const items = [];
+      for (const c of cells) {
+        const e = state.entities[key(c.x, c.y)];
+        if (!e) continue;
+        const it = { dx: c.x - x0, dy: c.y - y0, kind: e.kind, dir: e.dir };
+        if (e.outs) it.outs = [...e.outs];
+        items.push(it);
+      }
+      if (!items.length) { ui.hint('Ahí no hay nada que copiar'); selectTool('mano'); return; }
+      ctl.blueprint = items;
+      selectTool('pegar');
+      ui.hint(`Copiado: ${items.length} piezas. Toca donde quieras pegarlas`);
+    },
     onLongPress: (tile) => {
       if (isShip(state, tile.x, tile.y)) { ui.showShip(state); return; }
       const e = state.entities[key(tile.x, tile.y)];
@@ -188,15 +220,18 @@ async function boot() {
 
   // ---- Mensajes ----
   function welcome() {
-    for (const m of msg.WELCOME) ui.memo(m);
+    const opts = [msg.WELCOME[0], ...msg.WELCOME_ALT];
+    ui.memo(opts[Math.floor(Math.random() * opts.length)]);
     ui.memo(msg.orderIntro(currentOrder(state)));
   }
   let lastWrong = -1e9;
+  const arrivals = {}; // para las estadísticas: cuándo llegó cada cosa a la nave
   function flushEvents() {
     if (!state.events.length) return;
     for (const ev of state.events) {
       if (ev.type === 'orderDone') {
         ui.memo(msg.orderDoneMessage(ev.unlocks));
+        sfx.play(ev.unlocks.length ? 'unlock' : 'order');
         for (const k of ev.unlocks) ctl.recent = [k, ...ctl.recent.filter((r) => r !== k)];
         if (!state.planetDone) ui.memo(msg.orderIntro(currentOrder(state)));
         ui.renderOrder(state, true);
@@ -217,21 +252,70 @@ async function boot() {
         ui.memo(msg.orderIntro(currentOrder(state)));
       } else if (ev.type === 'tooSlow') {
         ui.memo(msg.tooSlowMessage(ev.rate));
+        sfx.play('slow');
+      } else if (ev.type === 'delivered') {
+        sfx.play('deliver');
+        (arrivals[ev.item] || (arrivals[ev.item] = [])).push(performance.now());
       } else if (ev.type === 'firstBelt') {
         ui.memo(msg.FIRST_BELT);
       }
     }
     state.events.length = 0;
   }
-  // Tutorial: arranca solo en partidas nuevas (o si se pide desde el catálogo)
+  // ---- Pantalla principal ----
+  // La partida está en pausa detrás hasta que se pulsa Continuar o Partida nueva.
+  let paused = true;
   let panBase = renderer.panned || 0;
   tut = new Tutorial({ ui, store });
-  if (isNew) tut.start();
-  else tut.render();
+  const $ = (id) => document.getElementById(id);
+  const hasSave = !isNew;
+  if (hasSave) {
+    $('title').classList.add('has-save');
+    $('continueBtn').hidden = false;
+    $('titleSave').hidden = false;
+    $('titleSave').textContent = `Planeta ${state.planet + 1} · pedido ${state.orderIndex + 1} · ${Object.keys(state.entities).length} piezas montadas`;
+  }
+  const soundLabel = () => {
+    $('titleSound').textContent = sfx.muted ? 'Sonido: apagado' : 'Sonido: encendido';
+    $('soundBtn').textContent = sfx.muted ? '🔇' : '🔊';
+  };
+  soundLabel();
+  const toggleSound = () => { sfx.setMuted(!sfx.muted); soundLabel(); sfx.play('tap'); };
+  $('titleSound').addEventListener('click', () => { sfx.unlock(); toggleSound(); });
+  $('soundBtn').addEventListener('click', toggleSound);
+  $('statsBtn').addEventListener('click', () => { sfx.play('tap'); ui.statsOpen ? ui.closeStats() : ui.openStats(state, arrivals); });
+  $('statsClose').addEventListener('click', () => ui.closeStats());
+  function start(fresh) {
+    sfx.unlock();
+    sfx.setAmbient(true);
+    sfx.play('tap');
+    $('title').hidden = true;
+    paused = false;
+    lastAction = performance.now();
+    if (fresh) {
+      tut.start(); panBase = renderer.panned || 0;
+      ui.renderBar(state);
+      welcome();
+    } else {
+      tut.render();
+      ui.memo('Bienvenido de vuelta, colono. La fábrica no se ha movido. Los pedidos tampoco: siguen esperándote.');
+    }
+  }
+  $('continueBtn').addEventListener('click', () => start(false));
+  $('newBtn').addEventListener('click', () => {
+    if (hasSave && !confirm('¿Empezar una partida nueva? Se pierde la fábrica guardada.')) return;
+    $('title').classList.remove('has-save');
+    if (hasSave) { state = createGame(); renderer.setState(state); renderer.centerOn(state.ship.x + 0.5, state.ship.y + 0.5, defaultZoom); clearUndo(); ui.renderOrder(state, true); save(); }
+    start(true);
+  });
   if (restarted) ui.memo('Chatarrex S.A. ha reestructurado la empresa: se acabaron los créditos. Ahora cada pedido cumplido te da maquinaria nueva. Tu fábrica antigua ha sido "reubicada". Empiezas de cero.');
-  if (isNew) welcome();
-  else ui.memo('Bienvenido de vuelta, colono. La fábrica no se ha movido. Los pedidos tampoco: siguen esperándote.');
-  setInterval(() => { if (document.getElementById('memo').hidden) ui.memo(msg.randomTip()); }, 90000);
+  setInterval(() => { if (!paused && document.getElementById('memo').hidden) ui.memo(msg.randomTip()); }, 90000);
+  // si lleva rato sin tocar nada, Chatarrex se interesa (con mucho cariño)
+  setInterval(() => {
+    if (paused || !document.getElementById('memo').hidden || performance.now() - lastAction < 180000) return;
+    lastAction = performance.now();
+    ui.memo(msg.IDLE[Math.floor(Math.random() * msg.IDLE.length)]);
+  }, 20000);
 
   // ---- Guardado ----
   function save() {
@@ -252,12 +336,15 @@ async function boot() {
     const dt = Math.min(0.25, ticker.deltaMS / 1000);
     acc += dt;
     time += dt;
+    if (paused) acc = 0;
     while (acc >= DT) { step(state); acc -= DT; }
     flushEvents();
     renderer.update(time, acc / DT);
     ui.renderOrder(state);
     if ((inspectTick = (inspectTick + 1) % 15) === 0) {
       ui.refreshInspect(state);
+      ui.renderStats(state, arrivals);
+      for (const k in arrivals) { const a = arrivals[k]; while (a.length && performance.now() - a[0] > 30000) a.shift(); }
       tut.flags.panned = (renderer.panned || 0) - panBase;
       if (tut.check(state)) ui.renderBar(state);
     }

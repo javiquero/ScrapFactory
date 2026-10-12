@@ -10,6 +10,8 @@ const SVG = {
   mano: '<svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M11 17V8a2 2 0 0 1 4 0v7M15 14V6a2 2 0 0 1 4 0v8M19 14V8a2 2 0 0 1 4 0v9c0 6-3.5 10-8.5 10-3.5 0-5.5-2-7.5-5l-2.5-4a2 2 0 0 1 3.2-2.4L11 18"/></svg>',
   deshacer: '<svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13h11a6 6 0 0 1 0 12h-6"/><path d="M14 8l-5 5 5 5"/></svg>',
   girar: '<svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M25 16a9 9 0 1 1-3-6.7"/><path d="M23 4v6h-6"/></svg>',
+  copiar: '<svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="5" width="15" height="15" rx="3" stroke-dasharray="3 3"/><rect x="12" y="12" width="15" height="15" rx="3"/></svg>',
+  pegar: '<svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="7" width="18" height="21" rx="3"/><path d="M12 7V5h8v2M12 15h8M12 20h6"/></svg>',
   borrar: '<svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9h20M13 9V6h6v3M9 9l1.5 17h11L23 9M14 14v8M18 14v8"/></svg>',
   mas: '<svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><rect x="5" y="5" width="9" height="9" rx="2.5"/><rect x="18" y="5" width="9" height="9" rx="2.5"/><rect x="5" y="18" width="9" height="9" rx="2.5"/><path d="M22.5 18v9M18 22.5h9"/></svg>',
 };
@@ -23,10 +25,10 @@ function unlockText(kind, state) {
 }
 
 export class UI {
-  constructor({ icons, ctl, onSelectTool, onUndo, onInspectRotate, onInspectRemove, onReset, onLaunch, onTutorial }) {
+  constructor({ icons, ctl, onSelectTool, onUndo, onInspectRotate, onInspectRemove, onReset, onLaunch, onTutorial, onToggleOut, onStats }) {
     this.icons = icons;
     this.ctl = ctl;
-    this.cb = { onSelectTool, onUndo, onInspectRotate, onInspectRemove, onReset, onLaunch, onTutorial };
+    this.cb = { onSelectTool, onUndo, onInspectRotate, onInspectRemove, onReset, onLaunch, onTutorial, onToggleOut, onStats };
     this.canUndo = false;
     this.tutTool = null;     // herramienta que el tutorial está señalando
     $('launchBtn').addEventListener('click', () => this.cb.onLaunch());
@@ -52,7 +54,7 @@ export class UI {
   renderBar(state) {
     const bar = $('bar');
     const { tool, dir } = this.ctl;
-    let recent = this.ctl.recent.filter((k) => state.unlocked.includes(k)).slice(0, 3);
+    let recent = this.ctl.recent.filter((k) => state.unlocked.includes(k)).slice(0, window.innerWidth < 430 ? 2 : 3);
     // lo que señala el tutorial tiene que estar en la barra
     if (this.tutTool && BUILDINGS[this.tutTool] && this.tutTool !== 'cinta' && state.unlocked.includes(this.tutTool) && !recent.includes(this.tutTool)) recent = [this.tutTool, ...recent.slice(0, 2)];
     const btn = (id, label, iconHtml, extra = '') =>
@@ -63,11 +65,18 @@ export class UI {
     for (const k of recent) html += btn(k, BUILDINGS[k].short, img(k));
     html += '<span class="sep" aria-hidden="true"></span>';
     html += `<button class="tool" data-act="undo" title="Deshacer (Ctrl+Z)" ${this.canUndo ? '' : 'disabled'}>${SVG.deshacer}<span>Deshacer</span></button>`;
+    // Copiar un trozo; con algo copiado, el botón pasa a Pegar (y tocarlo otra vez vuelve a Copiar)
+    const pasting = this.ctl.blueprint && tool !== 'copiar';
+    html += `<button class="tool" data-act="copy" aria-pressed="${tool === 'copiar' || tool === 'pegar'}" title="${pasting ? 'Pegar lo copiado' : 'Copiar un trozo'}">${pasting ? SVG.pegar : SVG.copiar}<span>${pasting ? 'Pegar' : 'Copiar'}</span></button>`;
     html += btn('borrar', 'Quitar', SVG.borrar);
     html += `<button class="tool more ${this.tutTool === 'panel' ? 'tut' : ''}" data-act="panel" title="Catálogo">${SVG.mas}<span>Más</span></button>`;
     bar.innerHTML = html;
     bar.querySelectorAll('[data-tool]').forEach((b) => b.addEventListener('click', () => this.cb.onSelectTool(b.dataset.tool)));
     bar.querySelector('[data-act=undo]').addEventListener('click', () => this.cb.onUndo());
+    bar.querySelector('[data-act=copy]').addEventListener('click', () => {
+      const t = this.ctl.tool;
+      this.cb.onSelectTool(t === 'pegar' || !this.ctl.blueprint ? 'copiar' : 'pegar');
+    });
     bar.querySelector('[data-act=panel]').addEventListener('click', () => this.openPanel(state));
   }
 
@@ -75,6 +84,51 @@ export class UI {
     this.canUndo = on;
     const b = document.querySelector('#bar [data-act=undo]');
     if (b) b.disabled = !on;
+  }
+
+  // ---- Estadísticas de producción ----
+  // `arrivals`: { item: [tiempos ms] } de lo que ha llegado a la nave (lo apunta main.js)
+  openStats(state, arrivals) {
+    this.statsOpen = true;
+    $('stats').hidden = false;
+    this.renderStats(state, arrivals);
+  }
+
+  closeStats() { this.statsOpen = false; $('stats').hidden = true; }
+
+  renderStats(state, arrivals) {
+    if (!this.statsOpen) return;
+    const now = performance.now();
+    const WIN = 30000;
+    const o = currentOrder(state);
+    const rates = Object.entries(arrivals)
+      .map(([item, ts]) => [item, ts.filter((t) => now - t < WIN).length / (WIN / 1000)])
+      .filter(([, r]) => r > 0).sort((a, b) => b[1] - a[1]);
+    const icon = (k) => `<img src="${this.icons[k] || ''}" alt="">`;
+    let html = '<h3>Llegando a la nave (últimos 30 s)</h3>';
+    if (!rates.length) html += '<p class="snote">Todavía no llega nada. La nave espera, la junta también.</p>';
+    for (const [item, r] of rates) {
+      const want = item === o.item;
+      html += `<div class="srow ${want ? 'want' : ''}">${icon('item_' + item)}<span class="sname">${ITEMS[item].name}${want && o.rate ? ` <small>(pedido: mín. ${num(o.rate)}/s)</small>` : ''}</span><span class="sval">${num(r)}/s</span></div>`;
+    }
+    // máquinas: cuántas hay de cada tipo y cuántas están trabajando ahora
+    const count = {};
+    for (const k in state.entities) {
+      const e = state.entities[k];
+      if (e.kind === 'cinta' || e.kind === 'puente' || e.kind === 'divisor') continue;
+      const c = count[e.kind] || (count[e.kind] = { n: 0, busy: 0 });
+      c.n++;
+      if (e.kind === 'extractor' ? e.out.length < 4 : e.busy) c.busy++;
+    }
+    const kinds = Object.keys(count);
+    html += '<h3>Máquinas trabajando</h3>';
+    if (!kinds.length) html += '<p class="snote">Ni una. Las máquinas no se montan solas (todavía).</p>';
+    for (const k of kinds) {
+      const c = count[k], pct = Math.round((c.busy / c.n) * 100);
+      html += `<div class="srow">${icon(k)}<span class="sname">${BUILDINGS[k].name} × ${c.n}<div class="sbar"><i style="width:${pct}%"></i></div></span><span class="sval">${pct}%</span></div>`;
+    }
+    html += '<p class="snote">Si una máquina está casi siempre parada, le falta material o se le atasca la salida.</p>';
+    $('statsBody').innerHTML = html;
   }
 
   // ---- Tutorial: una tarjeta con el paso actual ----
@@ -230,7 +284,21 @@ export class UI {
     $('inspectInfo').textContent = describe(e, state);
     $('inspectRotate').hidden = false;
     $('inspectRemove').hidden = false;
+    this.renderOuts(e);
     $('inspect').hidden = false;
+  }
+
+  // Divisor: botones para abrir/cerrar cada salida, con la flecha hacia donde sale en pantalla
+  renderOuts(e) {
+    const box = $('inspectOuts');
+    if (!e || e.kind !== 'divisor') { box.hidden = true; return; }
+    const ARROW = ['→', '↓', '←', '↑'];
+    const dirs = [(e.dir + 3) % 4, e.dir, (e.dir + 1) % 4];
+    const outs = e.outs || [true, true, true];
+    box.innerHTML = 'Salidas:' + dirs.map((d, i) =>
+      `<button class="out ${outs[i] ? '' : 'off'}" data-out="${i}" aria-pressed="${outs[i]}" title="${outs[i] ? 'Abierta' : 'Cerrada'}">${ARROW[d]}</button>`).join('');
+    box.querySelectorAll('[data-out]').forEach((b) => b.addEventListener('click', () => this.cb.onToggleOut(Number(b.dataset.out))));
+    box.hidden = false;
   }
 
   // La nave no se gira ni se quita: solo se mira
@@ -242,6 +310,7 @@ export class UI {
     $('inspectInfo').textContent = shipText(state);
     $('inspectRotate').hidden = true;
     $('inspectRemove').hidden = true;
+    $('inspectOuts').hidden = true;
     $('inspect').hidden = false;
   }
 
@@ -252,6 +321,7 @@ export class UI {
     const e = this.inspected;
     if (state.entities[`${e.x},${e.y}`] !== e) return this.hideInspect();
     $('inspectInfo').textContent = describe(e, state);
+    if (e.kind === 'divisor') this.renderOuts(e);
   }
 
   hideInspect() {

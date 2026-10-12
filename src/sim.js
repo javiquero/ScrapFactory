@@ -166,7 +166,9 @@ export function step(state) {
         if (e.item.p < 1) break;
         // Izquierda, frente, derecha, empezando por donde tocó la última vez
         const outs = [(e.dir + 3) % 4, e.dir, (e.dir + 1) % 4];
+        const open = e.outs || [true, true, true];
         for (let i = 0; i < 3; i++) {
+          if (!open[(e.rr + i) % 3]) continue;
           const d = outs[(e.rr + i) % 3];
           if (tryInsert(state, e.x + DX[d], e.y + DY[d], e.item.type, d)) {
             e.item = null;

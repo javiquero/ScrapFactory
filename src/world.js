@@ -33,7 +33,8 @@ function blob(nodes, rand, cx, cy, type, size) {
   for (const [x, y] of cells) nodes[key(x, y)] = type;
 }
 
-export function generateWorld(seed, planet = 0) {
+// gen: versión del generador. 1 = mapa abierto (partidas antiguas); 2 = con obstáculos.
+export function generateWorld(seed, planet = 0, gen = 1) {
   const rand = rng(seed);
   const nodes = {};
   const cx = Math.floor(MAP_W / 2);
@@ -62,11 +63,14 @@ export function generateWorld(seed, planet = 0) {
   // Zona despejada alrededor de la nave (2×2, esquina en el centro)
   for (let y = cy - 2; y <= cy + 2; y++) for (let x = cx - 2; x <= cx + 2; x++) delete nodes[key(x, y)];
 
+  const obstacles = gen >= 2 ? makeObstacles(seed, planet, nodes, cx, cy) : {};
+
   // Decoración (no bloquea): árboles, arbustos, flores, piedras, matas
   const decor = [];
   for (let y = 0; y < MAP_H; y++) {
     for (let x = 0; x < MAP_W; x++) {
       if (nodes[key(x, y)]) continue;
+      if (obstacles[key(x, y)] !== undefined) { rand(); continue; }
       if (Math.abs(x - cx) <= 3 && Math.abs(y - cy) <= 3) continue;
       const r = rand();
       if (r < 0.02) decor.push({ x, y, kind: 'arbol' });
@@ -78,5 +82,73 @@ export function generateWorld(seed, planet = 0) {
     }
   }
 
-  return { nodes, decor, spawn: { x: cx, y: cy } };
+  return { nodes, decor, obstacles, spawn: { x: cx, y: cy } };
+}
+
+// Obstáculos: grupos de rocas (o lo que toque en cada planeta) y, desde el planeta 3,
+// cordilleras largas con algún hueco. Cuantos más planetas, más. Nunca encierran un
+// recurso: si alguno queda aislado, se abre camino hasta él desde la nave.
+function makeObstacles(seed, planet, nodes, cx, cy) {
+  const rand = rng((seed ^ 0x2c1b3c6d) >>> 0);
+  const obs = {};
+  const free = (x, y) => x >= 1 && y >= 1 && x < MAP_W - 1 && y < MAP_H - 1 && !nodes[key(x, y)]
+    && !(Math.abs(x - cx - 0.5) < 4.5 && Math.abs(y - cy - 0.5) < 4.5);
+  const put = (x, y) => { if (free(x, y)) obs[key(x, y)] = Math.floor(rand() * 3); };
+  // grupos
+  const groups = 14 + planet * 4;
+  for (let i = 0; i < groups; i++) {
+    let x = 2 + Math.floor(rand() * (MAP_W - 4)), y = 2 + Math.floor(rand() * (MAP_H - 4));
+    const size = 3 + Math.floor(rand() * (6 + planet));
+    for (let k = 0; k < size; k++) {
+      put(x, y);
+      const d = Math.floor(rand() * 4);
+      x += [1, 0, -1, 0][d]; y += [0, 1, 0, -1][d];
+    }
+  }
+  // cordilleras (rectas largas con un hueco para pasar)
+  const ridges = planet >= 2 ? 2 + planet : planet;
+  for (let i = 0; i < ridges; i++) {
+    const horiz = rand() < 0.5;
+    const len = 8 + Math.floor(rand() * 12);
+    const x0 = 3 + Math.floor(rand() * (MAP_W - 6)), y0 = 3 + Math.floor(rand() * (MAP_H - 6));
+    const gap = 2 + Math.floor(rand() * (len - 4));
+    for (let t = 0; t < len; t++) {
+      if (t === gap || t === gap + 1) continue;
+      const x = horiz ? x0 + t : x0 + Math.round(Math.sin(t * 0.5) * 0.6);
+      const y = horiz ? y0 + Math.round(Math.sin(t * 0.5) * 0.6) : y0 + t;
+      put(x, y);
+    }
+  }
+  openPaths(obs, nodes, cx, cy);
+  return obs;
+}
+
+// Garantiza que se puede llegar desde la nave a todas las casillas de recurso:
+// camino más barato (cruzar un obstáculo cuesta 1, el resto 0) y se quita lo que estorbe.
+function openPaths(obs, nodes, cx, cy) {
+  const N = MAP_W * MAP_H;
+  const idx = (x, y) => y * MAP_W + x;
+  const dist = new Int32Array(N).fill(1e9), prev = new Int32Array(N).fill(-1);
+  const dq = new Int32Array(N * 4); let head = N * 2, tail = N * 2;
+  const s0 = idx(cx, cy);
+  dist[s0] = 0; dq[tail++] = s0;
+  while (head < tail) {
+    const c = dq[head++];
+    const x = c % MAP_W, y = (c / MAP_W) | 0;
+    for (let d = 0; d < 4; d++) {
+      const nx = x + [1, 0, -1, 0][d], ny = y + [0, 1, 0, -1][d];
+      if (nx < 0 || ny < 0 || nx >= MAP_W || ny >= MAP_H) continue;
+      const n = idx(nx, ny), w = obs[key(nx, ny)] !== undefined ? 1 : 0;
+      if (dist[c] + w < dist[n]) {
+        dist[n] = dist[c] + w; prev[n] = c;
+        if (w) dq[tail++] = n; else dq[--head] = n;
+      }
+    }
+  }
+  for (const k in nodes) {
+    const [x, y] = k.split(',').map(Number);
+    let c = idx(x, y);
+    if (dist[c] === 0) continue;
+    while (c !== -1 && c !== s0) { delete obs[key(c % MAP_W, (c / MAP_W) | 0)]; c = prev[c]; }
+  }
 }
