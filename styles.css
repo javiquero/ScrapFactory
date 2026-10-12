@@ -161,6 +161,7 @@ button:focus-visible { outline: 3px solid var(--sun); outline-offset: 2px; }
 }
 .big:active { transform: translateY(2px); box-shadow: 0 2px 0 var(--forest); }
 .title.has-save #newBtn { background: #fff; }
+.title-toggles { display: flex; justify-content: center; gap: 16px; }
 .title-sound { margin-top: 12px; background: none; font: inherit; font-size: 13px; color: var(--ink-soft); text-decoration: underline; }
 
 /* ---------- Botones de esquina y estadísticas ---------- */

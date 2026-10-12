@@ -254,7 +254,6 @@ async function boot() {
         ui.memo(msg.tooSlowMessage(ev.rate));
         sfx.play('slow');
       } else if (ev.type === 'delivered') {
-        sfx.play('deliver');
         (arrivals[ev.item] || (arrivals[ev.item] = [])).push(performance.now());
       } else if (ev.type === 'firstBelt') {
         ui.memo(msg.FIRST_BELT);
@@ -277,12 +276,14 @@ async function boot() {
   }
   const soundLabel = () => {
     $('titleSound').textContent = sfx.muted ? 'Sonido: apagado' : 'Sonido: encendido';
+    $('titleMusic').textContent = sfx.music ? 'Música: encendida' : 'Música: apagada';
     $('soundBtn').textContent = sfx.muted ? '🔇' : '🔊';
   };
   soundLabel();
   const toggleSound = () => { sfx.setMuted(!sfx.muted); soundLabel(); sfx.play('tap'); };
   $('titleSound').addEventListener('click', () => { sfx.unlock(); toggleSound(); });
   $('soundBtn').addEventListener('click', toggleSound);
+  $('titleMusic').addEventListener('click', () => { sfx.unlock(); sfx.setMusic(!sfx.music); soundLabel(); sfx.play('tap'); });
   $('statsBtn').addEventListener('click', () => { sfx.play('tap'); ui.statsOpen ? ui.closeStats() : ui.openStats(state, arrivals); });
   $('statsClose').addEventListener('click', () => ui.closeStats());
   function start(fresh) {
@@ -344,6 +345,13 @@ async function boot() {
     if ((inspectTick = (inspectTick + 1) % 15) === 0) {
       ui.refreshInspect(state);
       ui.renderStats(state, arrivals);
+      // el ruido de fábrica sube con las máquinas que están trabajando
+      let n = 0, busy = 0;
+      for (const k in state.entities) {
+        const e = state.entities[k];
+        if (e.kind === 'extractor') { n++; if (e.out.length < 4) busy++; } else if (e.inv) { n++; if (e.busy) busy++; }
+      }
+      sfx.setActivity(paused || !n ? 0 : (busy / n) * Math.min(1, n / 12));
       for (const k in arrivals) { const a = arrivals[k]; while (a.length && performance.now() - a[0] > 30000) a.shift(); }
       tut.flags.panned = (renderer.panned || 0) - panBase;
       if (tut.check(state)) ui.renderBar(state);

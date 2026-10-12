@@ -1,38 +1,55 @@
 // Sonido de Scrap Factory: todo sintetizado con Web Audio, sin archivos.
-// Estilo "chatarra simpática": clacs metálicos amables, notas suaves y un
-// zumbido de fábrica de fondo muy bajo. Nada de esto toca el estado de la
-// partida: es solo presentación.
+// Estilo "chatarra simpática": clacs metálicos amables, una música de fondo
+// generativa muy flojita y el rumor de las máquinas según cuánto trabajan.
+// Nada de esto toca el estado de la partida: es solo presentación (por eso
+// aquí sí se puede usar Math.random).
 //
 // Uso:
-//   sfx.unlock()          en el primer toque (crea o reanuda el AudioContext)
-//   sfx.play('place')     efectos cortos
-//   sfx.setMuted(true)    silencia y lo recuerda en localStorage
-//   sfx.setAmbient(true)  zumbido de fábrica en bucle
+//   sfx.unlock()            en el primer toque (crea o reanuda el AudioContext)
+//   sfx.play('place')       efectos cortos
+//   sfx.setMuted(true)      silencia TODO y lo recuerda en localStorage
+//   sfx.setAmbient(true)    activa el fondo: música + máquinas
+//   sfx.setMusic(false)     apaga solo la música (se recuerda)
+//   sfx.setActivity(0.5)    cuánto trabaja la fábrica (0..1), ~2 veces por segundo
 
 const CLAVE_MUTE = 'scrapfactory.muted';
+const CLAVE_MUSICA = 'scrapfactory.music';
 const VOLUMEN_MAESTRO = 0.55;
-const VOLUMEN_AMBIENTE = 0.05;
+const VOLUMEN_MUSICA = 0.6;     // ganancia del bus de música (las voces ya son flojas)
+const VOLUMEN_RUMOR = 0.05;     // rumor de fábrica a nivel 1
+const VOLUMEN_CLANC = 0.045;    // golpes mecánicos sueltos
+const ANTICIPACION = 1.2;       // segundos que se programan por adelantado
+const CADA_TICK = 250;          // ms entre vueltas del programador
+const DUR_ACORDE = 8;           // segundos por acorde
 
 let ctx = null;          // AudioContext (no se crea hasta unlock)
 let maestro = null;      // GainNode general
 let compresor = null;    // DynamicsCompressor para que no sature
-let ruido = null;        // AudioBuffer de ruido blanco reutilizable
-let muted = leerMute();
+let ruido = null;        // 1 s de ruido blanco para clacs
+let ruidoMarron = null;  // ruido grave largo, en bucle sin costura, para el rumor
+let muted = leerBool(CLAVE_MUTE, false);
+let musicaOn = leerBool(CLAVE_MUSICA, true);
 let quiereAmbiente = false;
-let ambiente = null;     // nodos del zumbido mientras suena
-let contador = 0;        // para variar un poco el tono sin Math.random
+let nivel = 0;           // actividad de la fábrica 0..1
+let musica = null;       // estado de la música mientras suena
+let maquinas = null;     // estado del sonido de máquinas mientras suena
+let timer = null;        // setTimeout del programador
+let contador = 0;        // para variar un poco los efectos
 
 // Limitadores: última vez (en segundos del contexto) que sonó cada efecto
 // frecuente, y separación mínima entre dos seguidos.
 const ultimo = {};
-const SEPARACION = { deliver: 1 / 6, belt: 1 / 25, tap: 1 / 30, rotate: 1 / 20 };
+const SEPARACION = { belt: 1 / 8, tap: 1 / 30, rotate: 1 / 20 };
 
-function leerMute() {
-  try { return localStorage.getItem(CLAVE_MUTE) === '1'; } catch { return false; }
+function leerBool(clave, porDefecto) {
+  try {
+    const v = localStorage.getItem(clave);
+    return v === null ? porDefecto : v === '1';
+  } catch { return porDefecto; }
 }
 
-function guardarMute(v) {
-  try { localStorage.setItem(CLAVE_MUTE, v ? '1' : '0'); } catch { /* sin almacenamiento */ }
+function guardarBool(clave, v) {
+  try { localStorage.setItem(clave, v ? '1' : '0'); } catch { /* sin almacenamiento */ }
 }
 
 function claseContexto() {
@@ -42,7 +59,18 @@ function claseContexto() {
   } catch { return null; }
 }
 
-// Crea el contexto, la cadena maestra y el buffer de ruido (una sola vez).
+const azar = (a, b) => a + Math.random() * (b - a);
+const elegir = (lista) => lista[Math.floor(Math.random() * lista.length)];
+const midiHz = (m) => 440 * Math.pow(2, (m - 69) / 12);
+
+function reanudar() {
+  try {
+    const p = ctx.resume();
+    if (p && p.catch) p.catch(() => {});
+  } catch { /* nada */ }
+}
+
+// Crea el contexto, la cadena maestra y los buffers de ruido (una sola vez).
 function crearContexto() {
   const AC = claseContexto();
   if (!AC) return false;
@@ -58,29 +86,46 @@ function crearContexto() {
   maestro.connect(compresor);
   compresor.connect(ctx.destination);
 
-  // 1 s de ruido blanco con un generador pseudoaleatorio fijo (LCG).
-  const n = ctx.sampleRate;
-  ruido = ctx.createBuffer(1, n, ctx.sampleRate);
+  const sr = ctx.sampleRate;
+  // Ruido blanco de 1 s para los clacs.
+  ruido = ctx.createBuffer(1, sr, sr);
   const d = ruido.getChannelData(0);
-  let s = 12345;
-  for (let i = 0; i < n; i++) {
-    s = (s * 1103515245 + 12345) >>> 0;
-    d[i] = (s / 4294967296) * 2 - 1;
+  for (let i = 0; i < sr; i++) d[i] = Math.random() * 2 - 1;
+
+  // Ruido marrón de 7 s con los extremos fundidos, para que el bucle no
+  // tenga un "clic" periódico (eso sí que se notaría como algo repetitivo).
+  const L = sr * 7;
+  const X = Math.floor(sr * 0.5);
+  const crudo = new Float32Array(L + X);
+  let b = 0;
+  for (let i = 0; i < L + X; i++) {
+    b = (b + 0.02 * (Math.random() * 2 - 1)) / 1.02;
+    crudo[i] = b * 3.5;
+  }
+  ruidoMarron = ctx.createBuffer(1, L, sr);
+  const m = ruidoMarron.getChannelData(0);
+  for (let i = 0; i < L; i++) m[i] = crudo[i];
+  for (let i = 0; i < X; i++) {
+    const w = i / X;
+    m[i] = crudo[i] * w + crudo[L + i] * (1 - w);
   }
   return true;
 }
 
 // Al acabar un nodo fuente, desconecta toda su cadena para no acumular.
-function alAcabar(fuente, nodos) {
+// Si ya tenía otro aviso de fin, lo encadena.
+function alAcabar(fuente, nodos, despues) {
   fuente.onended = () => {
     for (const nd of nodos) { try { nd.disconnect(); } catch { /* ya estaba */ } }
+    if (despues) despues(fuente);
   };
 }
 
 // Tono con envolvente: ataque corto y caída exponencial.
-// o: { tipo, f, f2 (deslizamiento), t (retardo), dur, vol, ataque, filtro, q, destino }
+// o: { tipo, f, f2 (deslizamiento), at (tiempo absoluto) o t (retardo), dur,
+//      vol, ataque, filtro, q, detune, destino, fin (callback al acabar) }
 function tono(o) {
-  const t0 = ctx.currentTime + (o.t || 0);
+  const t0 = o.at ?? (ctx.currentTime + (o.t || 0));
   const dur = o.dur || 0.1;
   const ataque = o.ataque ?? 0.005;
   const osc = ctx.createOscillator();
@@ -106,21 +151,20 @@ function tono(o) {
   }
   ultimoNodo.connect(g);
   g.connect(o.destino || maestro);
-  alAcabar(osc, nodos);
+  alAcabar(osc, nodos, o.fin);
   osc.start(t0);
   osc.stop(t0 + dur + 0.02);
+  return osc;
 }
 
-// Ráfaga de ruido filtrado (clacs, chasquidos, rumor de motor).
-// o: { t, dur, vol, tipoFiltro, f, f2, q, ataque }
+// Ráfaga de ruido filtrado (clacs, chasquidos, vapor).
+// o: { at o t, dur, vol, tipoFiltro, f, f2, q, ataque, destino, fin }
 function rafaga(o) {
-  const t0 = ctx.currentTime + (o.t || 0);
+  const t0 = o.at ?? (ctx.currentTime + (o.t || 0));
   const dur = o.dur || 0.05;
   const src = ctx.createBufferSource();
   src.buffer = ruido;
   src.loop = true; // por si la ráfaga dura más que el buffer (despegue)
-  // Empieza en un punto distinto cada vez para que no suene idéntico.
-  const desde = ((contador * 0.137) % 0.8);
   const fl = ctx.createBiquadFilter();
   fl.type = o.tipoFiltro || 'bandpass';
   fl.frequency.setValueAtTime(o.f || 2000, t0);
@@ -132,10 +176,12 @@ function rafaga(o) {
   g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
   src.connect(fl);
   fl.connect(g);
-  g.connect(maestro);
-  alAcabar(src, [src, fl, g]);
-  src.start(t0, desde, dur + 0.05);
+  g.connect(o.destino || maestro);
+  alAcabar(src, [src, fl, g], o.fin);
+  // Empieza en un punto distinto cada vez para que no suene idéntico.
+  src.start(t0, azar(0, 0.8), dur + 0.05);
   src.stop(t0 + dur + 0.05);
+  return src;
 }
 
 // Notas (Hz) que se usan en jingles.
@@ -158,11 +204,10 @@ const SONIDOS = {
     tono({ tipo: 'triangle', f: 190, f2: 85, dur: 0.09, vol: 0.32 });
     tono({ tipo: 'sine', f: 1250, dur: 0.05, vol: 0.05, t: 0.004 });
   },
-  // Tictac muy corto y bajo; alterna dos alturas.
+  // "Tok" suave y corto al trazar cinta (tope de 8 por segundo).
   belt() {
-    const f = contador % 2 ? 1100 : 950;
-    tono({ tipo: 'triangle', f, dur: 0.025, vol: 0.05, ataque: 0.002 });
-    rafaga({ dur: 0.015, vol: 0.04, f: 3500, q: 2 });
+    const f = contador % 2 ? 640 : 560;
+    tono({ tipo: 'sine', f, f2: f * 0.85, dur: 0.035, vol: 0.035, ataque: 0.004 });
   },
   // Chasquido que cae: barrido descendente + ruido que se oscurece.
   remove() {
@@ -180,12 +225,8 @@ const SONIDOS = {
     campana(N.E5, 0, 0.12, 0.13);
     campana(N.B4, 0.09, 0.16, 0.13);
   },
-  // Pop muy suave; sube y baja por una escala corta para no aburrir.
-  deliver() {
-    const escala = [N.C5, N.D5, N.E5, N.G5, N.A5];
-    const f = escala[contador % escala.length];
-    tono({ tipo: 'sine', f: f * 0.8, f2: f * 1.25, dur: 0.06, vol: 0.06, ataque: 0.003 });
-  },
+  // Ya no suena nada por pieza entregada (resultaba repetitivo).
+  deliver() {},
   // Jingle alegre de pedido cumplido: C-E-G-C.
   order() {
     const notas = [N.C5, N.E5, N.G5, N.C6];
@@ -254,82 +295,375 @@ const SONIDOS = {
   },
 };
 
-// ---- Ambiente: zumbido de fábrica muy bajo ----
+// =====================================================================
+// Música de fondo generativa
+// =====================================================================
+// Pad de acordes muy suave (4 acordes, ~8 s cada uno) y encima notas sueltas
+// tipo marimba de una pentatónica, a intervalos irregulares, con eco suave.
+// Cada pocos acordes cambia la progresión, el registro, o hay silencios.
 
-function arrancarAmbiente() {
-  if (ambiente || !ctx || muted) return;
+// Acordes en notas MIDI (voicing grave y cerrado) + escala para la melodía.
+const PENTA_MAYOR = [0, 2, 4, 7, 9];      // C D E G A
+const PENTA_MIXO = [0, 2, 5, 7, 10];      // C D F G Bb
+const PROGRESIONES = [
+  // Cmaj7 - Am7 - Fmaj7 - G6
+  [[48, 55, 59, 64], [45, 52, 55, 60], [41, 48, 52, 57], [43, 50, 52, 59]].map((n) => ({ n, e: PENTA_MAYOR })),
+  // Cadd9 - Bb - Fadd9 - C (sabor mixolidio)
+  [
+    { n: [48, 55, 62, 64], e: PENTA_MAYOR }, { n: [46, 53, 58, 62], e: PENTA_MIXO },
+    { n: [41, 48, 55, 57], e: PENTA_MIXO }, { n: [48, 52, 55, 60], e: PENTA_MAYOR },
+  ],
+  // Fmaj7 - G - Em7 - Am7
+  [[41, 48, 52, 57], [43, 50, 55, 59], [40, 47, 50, 55], [45, 52, 55, 60]].map((n) => ({ n, e: PENTA_MAYOR })),
+];
+
+function arrancarMusica() {
+  if (musica || !ctx) return;
   try {
     const t0 = ctx.currentTime;
-    const salida = ctx.createGain();
-    salida.gain.setValueAtTime(0.0001, t0);
-    salida.gain.linearRampToValueAtTime(VOLUMEN_AMBIENTE, t0 + 2.5);
-    salida.connect(maestro);
+    const bus = ctx.createGain();
+    bus.gain.setValueAtTime(0, t0);
+    bus.gain.setTargetAtTime(VOLUMEN_MUSICA, t0, 1.5);
+    bus.connect(maestro);
 
-    // Drone: dos osciladores ligeramente desafinados, oscurecidos.
-    const filtro = ctx.createBiquadFilter();
-    filtro.type = 'lowpass';
-    filtro.frequency.value = 320;
-    filtro.Q.value = 0.6;
-    const o1 = ctx.createOscillator();
-    o1.type = 'triangle';
-    o1.frequency.value = 55;
-    const o2 = ctx.createOscillator();
-    o2.type = 'sawtooth';
-    o2.frequency.value = 55.4;
-    const g2 = ctx.createGain();
-    g2.gain.value = 0.35;
-    o1.connect(filtro);
-    o2.connect(g2); g2.connect(filtro);
-    const gDrone = ctx.createGain();
-    gDrone.gain.value = 0.7;
-    filtro.connect(gDrone); gDrone.connect(salida);
+    // Pad: un paso bajo común para que quede aterciopelado.
+    const padFiltro = ctx.createBiquadFilter();
+    padFiltro.type = 'lowpass';
+    padFiltro.frequency.value = 900;
+    padFiltro.Q.value = 0.5;
+    padFiltro.connect(bus);
 
-    // Ruido grave de nave industrial.
-    const r = ctx.createBufferSource();
-    r.buffer = ruido;
-    r.loop = true;
-    const fr = ctx.createBiquadFilter();
-    fr.type = 'lowpass';
-    fr.frequency.value = 420;
-    fr.Q.value = 0.5;
-    const gr = ctx.createGain();
-    gr.gain.value = 0.5;
-    r.connect(fr); fr.connect(gr); gr.connect(salida);
+    // Eco suave para las campanitas: delay con realimentación baja y oscura.
+    const envio = ctx.createGain();
+    envio.gain.value = 0.35;
+    const eco = ctx.createDelay(2);
+    eco.delayTime.value = 0.42;
+    const ecoFiltro = ctx.createBiquadFilter();
+    ecoFiltro.type = 'lowpass';
+    ecoFiltro.frequency.value = 2200;
+    const realim = ctx.createGain();
+    realim.gain.value = 0.28;
+    envio.connect(eco);
+    eco.connect(ecoFiltro);
+    ecoFiltro.connect(realim);
+    realim.connect(eco);
+    ecoFiltro.connect(bus);
 
-    // LFO lento: respira el filtro del drone y el volumen del ruido.
-    const lfo = ctx.createOscillator();
-    lfo.type = 'sine';
-    lfo.frequency.value = 0.07;
-    const lfoFiltro = ctx.createGain();
-    lfoFiltro.gain.value = 90;
-    const lfoRuido = ctx.createGain();
-    lfoRuido.gain.value = 0.2;
-    lfo.connect(lfoFiltro); lfoFiltro.connect(filtro.frequency);
-    lfo.connect(lfoRuido); lfoRuido.connect(gr.gain);
-
-    o1.start(t0); o2.start(t0); r.start(t0); lfo.start(t0);
-    ambiente = {
-      salida,
-      fuentes: [o1, o2, r, lfo],
-      nodos: [salida, filtro, o1, o2, g2, gDrone, r, fr, gr, lfo, lfoFiltro, lfoRuido],
+    musica = {
+      bus, padFiltro, envio,
+      nodos: [bus, padFiltro, envio, eco, ecoFiltro, realim],
+      fuentes: new Set(),
+      prog: elegir(PROGRESIONES),
+      idx: 0,
+      vueltas: 0,
+      proxAcorde: t0 + 0.3,
+      acordeActual: null,
+      finAcorde: t0 + 0.3,
+      proxNota: t0 + azar(2, 4),
+      silencioHasta: 0,
+      registro: 12,         // desplazamiento de la melodía sobre C4
+      cambioRegistro: 3,    // acordes hasta el próximo cambio de registro
+      ultimoGrado: 2,
     };
-  } catch { ambiente = null; }
+  } catch { musica = null; }
 }
 
-function pararAmbiente() {
-  if (!ambiente || !ctx) { ambiente = null; return; }
-  const a = ambiente;
-  ambiente = null;
+// Registra una fuente de la música para poder pararla y limpiarla.
+function fuenteMusica(m) {
+  return (src) => {
+    m.fuentes.add(src);
+    const prev = src.onended;
+    src.onended = (e) => { m.fuentes.delete(src); if (prev) prev.call(src, e); };
+  };
+}
+
+function pararMusica() {
+  if (!musica) return;
+  const m = musica;
+  musica = null;
   try {
     const t0 = ctx.currentTime;
-    a.salida.gain.cancelScheduledValues(t0);
-    a.salida.gain.setValueAtTime(a.salida.gain.value, t0);
-    a.salida.gain.linearRampToValueAtTime(0.0001, t0 + 0.6);
-    for (const f of a.fuentes) f.stop(t0 + 0.65);
-    a.fuentes[0].onended = () => {
-      for (const nd of a.nodos) { try { nd.disconnect(); } catch { /* ya estaba */ } }
-    };
+    m.bus.gain.cancelScheduledValues(t0);
+    m.bus.gain.setValueAtTime(m.bus.gain.value, t0);
+    m.bus.gain.linearRampToValueAtTime(0, t0 + 1.2);
+    for (const f of m.fuentes) { try { f.stop(t0 + 1.3); } catch { /* ya parada */ } }
   } catch { /* nada */ }
+  // El eco tiene un lazo de realimentación: hay que desconectarlo a mano.
+  setTimeout(() => {
+    for (const nd of m.nodos) { try { nd.disconnect(); } catch { /* ya estaba */ } }
+  }, 2500);
+}
+
+// Una voz de pad: dos osciladores suaves con ataque y relajación largos.
+function vozPad(m, f, at, dur, vol) {
+  const registrar = fuenteMusica(m);
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, at);
+  g.gain.linearRampToValueAtTime(vol, at + 2.5);
+  g.gain.setValueAtTime(vol, at + dur - 3);
+  g.gain.linearRampToValueAtTime(0.0001, at + dur);
+  g.connect(m.padFiltro);
+  const o1 = ctx.createOscillator();
+  o1.type = 'triangle';
+  o1.frequency.value = f;
+  const o2 = ctx.createOscillator();
+  o2.type = 'sine';
+  o2.frequency.value = f;
+  o2.detune.value = azar(4, 8);
+  o1.connect(g);
+  o2.connect(g);
+  alAcabar(o1, [o1, g]);
+  alAcabar(o2, [o2]);
+  registrar(o1);
+  registrar(o2);
+  o1.start(at); o2.start(at);
+  o1.stop(at + dur + 0.05); o2.stop(at + dur + 0.05);
+}
+
+// Programa un acorde (pad + bajo suave).
+function programarAcorde(m, at) {
+  // Cada vuelta completa puede cambiar de progresión.
+  if (m.idx === 0 && m.vueltas > 0 && Math.random() < 0.5) m.prog = elegir(PROGRESIONES);
+  const acorde = m.prog[m.idx];
+  m.acordeActual = acorde;
+  m.finAcorde = at + DUR_ACORDE;
+  const dur = DUR_ACORDE + 2.5; // se solapa con el siguiente
+
+  const r = Math.random();
+  if (r < 0.08) {
+    // Respiro: este acorde el pad descansa.
+  } else if (r < 0.2) {
+    // Versión ligera: solo fundamental y quinta.
+    vozPad(m, midiHz(acorde.n[0]), at, dur, 0.009);
+    vozPad(m, midiHz(acorde.n[1]), at, dur, 0.008);
+  } else {
+    for (const n of acorde.n) vozPad(m, midiHz(n), at, dur, 0.011);
+  }
+  // Bajo muy suave de vez en cuando.
+  if (Math.random() < 0.6) {
+    fuenteMusica(m)(tono({
+      tipo: 'sine', f: midiHz(acorde.n[0] - 12), at, dur: 5, vol: 0.025, ataque: 0.8,
+      destino: m.bus,
+    }));
+  }
+
+  // Variaciones: silencios de melodía y cambios de registro.
+  if (Math.random() < 0.22) m.silencioHasta = m.finAcorde;
+  if (--m.cambioRegistro <= 0) {
+    m.registro = elegir([0, 12, 12, 24]);
+    m.cambioRegistro = 2 + Math.floor(Math.random() * 4);
+  }
+  m.idx = (m.idx + 1) % m.prog.length;
+  if (m.idx === 0) m.vueltas++;
+}
+
+// Una nota tipo marimba/campanita: fundamental + parcial ~4x que se apaga antes.
+function notaMarimba(m, f, at, vol) {
+  const registrar = fuenteMusica(m);
+  const salida = ctx.createGain();
+  salida.gain.value = 1;
+  salida.connect(m.bus);
+  salida.connect(m.envio);
+  const fin = () => { try { salida.disconnect(); } catch { /* ya estaba */ } };
+  registrar(tono({ tipo: 'sine', f, at, dur: 1.1, vol, ataque: 0.008, destino: salida, fin }));
+  registrar(tono({ tipo: 'sine', f: f * 3.98, at, dur: 0.18, vol: vol * 0.18, ataque: 0.004, destino: salida }));
+  registrar(tono({ tipo: 'triangle', f: f * 2, at, dur: 0.5, vol: vol * 0.15, ataque: 0.006, destino: salida }));
+}
+
+function programarNota(m, at) {
+  if (at >= m.silencioHasta && m.acordeActual) {
+    const escala = m.acordeActual.e;
+    // Paseo por la escala: pasos cortos, sin grandes saltos.
+    const paso = elegir([-2, -1, -1, 0, 1, 1, 2]);
+    m.ultimoGrado = Math.max(0, Math.min(9, m.ultimoGrado + paso));
+    const g = m.ultimoGrado;
+    const midi = 60 + m.registro + escala[g % 5] + 12 * Math.floor(g / 5) - 12;
+    notaMarimba(m, midiHz(midi), at, azar(0.022, 0.034));
+  }
+  // Siguiente nota a un intervalo irregular: sueltas, frasecitas y pausas.
+  const r = Math.random();
+  let hueco;
+  if (r < 0.3) hueco = azar(0.28, 0.5);       // frasecita
+  else if (r < 0.88) hueco = azar(0.9, 2.6);  // nota suelta
+  else hueco = azar(3.5, 7);                  // pausa larga
+  m.proxNota = at + hueco;
+}
+
+function tickMusica(ahora) {
+  const m = musica;
+  if (!m) return;
+  // Si el contexto estuvo parado y nos quedamos atrás, recolocar.
+  if (m.proxAcorde < ahora - 1) m.proxAcorde = ahora + 0.1;
+  if (m.proxNota < ahora - 1) m.proxNota = ahora + 0.5;
+  const limite = ahora + ANTICIPACION;
+  while (m.proxAcorde < limite) {
+    programarAcorde(m, m.proxAcorde);
+    m.proxAcorde += DUR_ACORDE;
+  }
+  while (m.proxNota < limite) programarNota(m, m.proxNota);
+}
+
+// =====================================================================
+// Sonido de máquinas según la actividad
+// =====================================================================
+// Rumor grave (ruido marrón filtrado, sin LFO) cuyo volumen sigue al nivel, y
+// golpes mecánicos sueltos (pistón, engranaje, vapor, clanc) a intervalos
+// aleatorios, panoramizados un poco a izquierda y derecha.
+
+function arrancarMaquinas() {
+  if (maquinas || !ctx) return;
+  try {
+    const t0 = ctx.currentTime;
+    const bus = ctx.createGain();
+    bus.gain.value = 1;
+    bus.connect(maestro);
+    const src = ctx.createBufferSource();
+    src.buffer = ruidoMarron;
+    src.loop = true;
+    const fl = ctx.createBiquadFilter();
+    fl.type = 'lowpass';
+    fl.frequency.value = 280;
+    fl.Q.value = 0.5;
+    const gRumor = ctx.createGain();
+    gRumor.gain.setValueAtTime(0, t0);
+    src.connect(fl); fl.connect(gRumor); gRumor.connect(bus);
+    src.start(t0, azar(0, 6));
+    maquinas = {
+      bus, src, gRumor,
+      nodos: [bus, src, fl, gRumor],
+      proxClanc: t0 + azar(0.3, 1.5),
+      ceroDesde: null,
+      ultimoTipo: null,
+    };
+  } catch { maquinas = null; }
+}
+
+function pararMaquinas(rapido) {
+  if (!maquinas) return;
+  const q = maquinas;
+  maquinas = null;
+  try {
+    const t0 = ctx.currentTime;
+    const fundido = rapido ? 0.3 : 1;
+    q.bus.gain.cancelScheduledValues(t0);
+    q.bus.gain.setValueAtTime(q.bus.gain.value, t0);
+    q.bus.gain.linearRampToValueAtTime(0, t0 + fundido);
+    alAcabar(q.src, q.nodos);
+    q.src.stop(t0 + fundido + 0.05);
+  } catch { /* nada */ }
+}
+
+// Golpes mecánicos. k = factor de tono, v = volumen, d = destino (panner).
+const CLANCS = {
+  piston(at, k, v, d, fin) {
+    rafaga({ at, dur: 0.08, vol: v, f: 700 * k, q: 1.5, destino: d });
+    tono({ at, tipo: 'triangle', f: 130 * k, f2: 65 * k, dur: 0.14, vol: v * 1.3, destino: d, fin });
+  },
+  engranaje(at, k, v, d, fin) {
+    const n = 2 + Math.floor(Math.random() * 3);
+    for (let i = 0; i < n; i++) {
+      const t = at + i * azar(0.06, 0.09);
+      tono({ at: t, tipo: 'sine', f: 2100 * k, dur: 0.03, vol: v * 0.5, destino: d });
+      tono({ at: t, tipo: 'sine', f: 3170 * k, dur: 0.02, vol: v * 0.25, destino: d, fin: i === n - 1 ? fin : null });
+    }
+  },
+  vapor(at, k, v, d, fin) {
+    rafaga({ at, dur: 0.3, vol: v * 0.7, f: 2400 * k, f2: 1300 * k, q: 0.8, ataque: 0.05, destino: d, fin });
+  },
+  clanc(at, k, v, d, fin) {
+    tono({ at, tipo: 'sine', f: 420 * k, dur: 0.4, vol: v * 0.55, destino: d, fin });
+    tono({ at, tipo: 'sine', f: 1090 * k, dur: 0.22, vol: v * 0.28, destino: d });
+    tono({ at, tipo: 'sine', f: 1870 * k, dur: 0.12, vol: v * 0.18, destino: d });
+    rafaga({ at, dur: 0.03, vol: v * 0.4, f: 3000 * k, q: 2, destino: d });
+  },
+};
+const TIPOS_CLANC = ['piston', 'piston', 'engranaje', 'vapor', 'clanc'];
+
+function programarClanc(q, at) {
+  let tipo = elegir(TIPOS_CLANC);
+  if (tipo === q.ultimoTipo) tipo = elegir(TIPOS_CLANC);
+  q.ultimoTipo = tipo;
+  // Salida propia con panorama; se desconecta cuando acaba su voz más larga.
+  const g = ctx.createGain();
+  g.gain.value = 1;
+  let ultimoNodo = g;
+  const nodos = [g];
+  if (ctx.createStereoPanner) {
+    const p = ctx.createStereoPanner();
+    p.pan.value = azar(-0.6, 0.6);
+    g.connect(p);
+    ultimoNodo = p;
+    nodos.push(p);
+  }
+  ultimoNodo.connect(q.bus);
+  const fin = () => { for (const nd of nodos) { try { nd.disconnect(); } catch { /* ya estaba */ } } };
+  const v = VOLUMEN_CLANC * azar(0.6, 1) * (0.6 + 0.4 * nivel);
+  CLANCS[tipo](at, azar(0.85, 1.15), v, g, fin);
+}
+
+function tickMaquinas(ahora) {
+  const q = maquinas;
+  if (!q) return;
+  if (nivel <= 0.01) {
+    // Sin actividad: tras el fundido se apaga del todo.
+    if (q.ceroDesde !== null && ahora - q.ceroDesde > 4) pararMaquinas(true);
+    return;
+  }
+  if (q.proxClanc < ahora) q.proxClanc = ahora + azar(0.05, 0.4);
+  const limite = ahora + ANTICIPACION;
+  while (q.proxClanc < limite) {
+    programarClanc(q, q.proxClanc);
+    // Intervalo exponencial: de media 2*nivel golpes por segundo, nunca < 0,35 s.
+    const media = 1 / (2 * nivel);
+    q.proxClanc += Math.max(0.35, -Math.log(1 - Math.random()) * media);
+  }
+}
+
+// =====================================================================
+// Coordinación del fondo
+// =====================================================================
+
+function fondoPermitido() { return !!ctx && quiereAmbiente && !muted; }
+
+// Pone música y máquinas en el estado que toca según las preferencias.
+function actualizarFondo() {
+  try {
+    if (fondoPermitido() && musicaOn) arrancarMusica();
+    else pararMusica();
+
+    if (!fondoPermitido()) {
+      pararMaquinas(true);
+    } else if (nivel > 0.01) {
+      arrancarMaquinas();
+      const q = maquinas;
+      if (q) {
+        q.ceroDesde = null;
+        q.gRumor.gain.setTargetAtTime(VOLUMEN_RUMOR * nivel, ctx.currentTime, 0.8);
+      }
+    } else if (maquinas) {
+      if (maquinas.ceroDesde === null) maquinas.ceroDesde = ctx.currentTime;
+      maquinas.gRumor.gain.setTargetAtTime(0, ctx.currentTime, 0.6);
+    }
+  } catch { /* nada */ }
+  asegurarTick();
+}
+
+// Programador: cada CADA_TICK ms programa lo que cae en los próximos
+// ANTICIPACION segundos usando el reloj del contexto (preciso aunque el
+// temporizador vaya con retraso). Se detiene solo cuando no hay nada.
+function asegurarTick() {
+  if (timer === null && (musica || maquinas)) timer = setTimeout(tick, 0);
+}
+
+function tick() {
+  timer = null;
+  if (!ctx || (!musica && !maquinas)) return;
+  try {
+    const ahora = ctx.currentTime;
+    tickMusica(ahora);
+    tickMaquinas(ahora);
+  } catch { /* nada */ }
+  if (musica || maquinas) timer = setTimeout(tick, CADA_TICK);
 }
 
 // Con la pestaña oculta se suspende el contexto (ahorra batería en el móvil).
@@ -350,11 +684,8 @@ export const sfx = {
   unlock() {
     try {
       if (!ctx && !crearContexto()) return;
-      if (ctx.state === 'suspended' || ctx.state === 'interrupted') {
-        const p = ctx.resume();
-        if (p && p.catch) p.catch(() => {});
-      }
-      if (quiereAmbiente && !muted) arrancarAmbiente();
+      if (ctx.state === 'suspended' || ctx.state === 'interrupted') reanudar();
+      actualizarFondo();
     } catch { /* sin audio, el juego sigue */ }
   },
 
@@ -365,8 +696,7 @@ export const sfx = {
       if (!receta) return;
       if (ctx.state !== 'running') {
         // iOS puede dejarlo suspendido tras una interrupción.
-        const p = ctx.resume();
-        if (p && p.catch) p.catch(() => {});
+        reanudar();
         return;
       }
       const sep = SEPARACION[nombre];
@@ -380,27 +710,41 @@ export const sfx = {
     } catch { /* un sonido fallido no debe romper nada */ }
   },
 
+  // Silencia TODO (efectos, música y máquinas).
   setMuted(v) {
     muted = !!v;
-    guardarMute(muted);
+    guardarBool(CLAVE_MUTE, muted);
     try {
       if (!ctx) return;
       const t0 = ctx.currentTime;
       maestro.gain.cancelScheduledValues(t0);
       maestro.gain.setValueAtTime(maestro.gain.value, t0);
       maestro.gain.linearRampToValueAtTime(muted ? 0 : VOLUMEN_MAESTRO, t0 + 0.08);
-      if (muted) pararAmbiente();
-      else if (quiereAmbiente) arrancarAmbiente();
     } catch { /* nada */ }
+    actualizarFondo();
   },
 
   get muted() { return muted; },
 
+  // Activa o desactiva el fondo (música + máquinas).
   setAmbient(v) {
     quiereAmbiente = !!v;
-    try {
-      if (quiereAmbiente) arrancarAmbiente();
-      else pararAmbiente();
-    } catch { /* nada */ }
+    actualizarFondo();
+  },
+
+  // Solo la música; las máquinas siguen sonando si no está silenciado.
+  setMusic(v) {
+    musicaOn = !!v;
+    guardarBool(CLAVE_MUSICA, musicaOn);
+    actualizarFondo();
+  },
+
+  get music() { return musicaOn; },
+
+  // Fracción de fábrica trabajando (0..1). Con 0, silencio de máquinas.
+  setActivity(v) {
+    const n = Number(v);
+    nivel = Number.isFinite(n) ? Math.max(0, Math.min(1, n)) : 0;
+    actualizarFondo();
   },
 };
