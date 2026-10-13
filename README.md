@@ -20,7 +20,7 @@ Inspirado en Builderment, pero en el navegador: funciona igual en el móvil que 
 - **Mapa**: obstáculos (rocas, charcas, montañas de neumáticos…) por los que no se puede construir; más cuanto más lejos el planeta. Nunca encierran un recurso.
 - **Tutorial**: sale solo en partidas nuevas (moverse, extraer, girar, cintas y los dos primeros pedidos). Se puede repetir desde el catálogo.
 - **Nave**: 2×2 casillas, fija. Recibe por los cuatro lados (dos entradas por lado). Tocarla muestra lo enviado.
-- **Más**: catálogo con todo lo desbloqueado (y cuándo se desbloquea lo demás). Lo que eliges pasa a la barra de abajo.
+- **Más**: catálogo con la maquinaria que ya tienes (lo demás aparece al desbloquearlo). Lo que eliges pasa a la barra de abajo.
 
 ## Ritmos
 

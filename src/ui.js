@@ -1,6 +1,6 @@
 // Interfaz en HTML por encima del lienzo: pedido, barra rápida, catálogo, comunicados.
 
-import { BUILDINGS, CATEGORIES, ITEMS, PLANETS, MACHINE_BUFFER, beltRate, extractorRate, craftTime, unlockedBy, minRate } from './defs.js';
+import { BUILDINGS, CATEGORIES, ITEMS, PLANETS, MACHINE_BUFFER, beltRate, extractorRate, craftTime, minRate } from './defs.js';
 import { currentOrder, hasNextPlanet, orderRate } from './state.js';
 import { shipText } from './messages.js';
 
@@ -15,14 +15,6 @@ const SVG = {
   borrar: '<svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9h20M13 9V6h6v3M9 9l1.5 17h11L23 9M14 14v8M18 14v8"/></svg>',
   mas: '<svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><rect x="5" y="5" width="9" height="9" rx="2.5"/><rect x="18" y="5" width="9" height="9" rx="2.5"/><rect x="5" y="18" width="9" height="9" rx="2.5"/><path d="M22.5 18v9M18 22.5h9"/></svg>',
 };
-
-// Cuándo se desbloquea un edificio que aún no tienes
-function unlockText(kind, state) {
-  const u = unlockedBy(kind);
-  if (!u) return 'Próximamente.';
-  if (u.planet > state.planet) return `Se desbloquea en el planeta ${u.planet + 1}.`;
-  return `Se desbloquea al cumplir el pedido ${u.order + 1}.`;
-}
 
 export class UI {
   constructor({ icons, ctl, onSelectTool, onUndo, onInspectRotate, onInspectRemove, onReset, onLaunch, onTutorial, onToggleOut, onStats }) {
@@ -163,6 +155,7 @@ export class UI {
     const list = $('panelList');
     const scroll = list.scrollTop;
     let html = '';
+    let pending = 0;
     for (const cat of CATEGORIES) {
       let rows = '';
       for (const k in BUILDINGS) {
@@ -173,12 +166,12 @@ export class UI {
         if (state.unlocked.includes(k)) {
           rows += `<div class="entry ${this.tutTool === k ? 'tut' : ''}"><button class="entry-main" data-k="${k}">${img}<span><b>${b.name}</b>${flow}<small>${b.desc} <i>${rateText(k, state)}</i></small></span></button></div>`;
         } else {
-          const later = (unlockedBy(k)?.planet ?? 99) > state.planet;
-          rows += `<div class="entry locked ${later ? 'soon' : ''}"><div class="entry-main">${img}<span><b>${b.name}</b>${flow}<small>${unlockText(k, state)}</small></span></div></div>`;
+          pending++; // lo que aún no tienes no se enseña: ya llegará con los pedidos
         }
       }
       if (rows) html += `<div class="cat">${cat.name}</div>${rows}`;
     }
+    if (pending) html += `<p class="panel-more">Chatarrex te irá mandando más maquinaria al cumplir pedidos.</p>`;
     list.innerHTML = html;
     list.scrollTop = scroll;
     list.querySelectorAll('[data-k]').forEach((el) => el.addEventListener('click', () => {
