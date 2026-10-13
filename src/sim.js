@@ -3,7 +3,7 @@
 
 import {
   BUILDINGS, BELT_SPACING, DT, TICK_RATE, RATE_SECONDS, DX, DY, ITEMS, MACHINE_BUFFER, OUTPUT_BUFFER, SHIP_SIZE,
-  opposite, orderAt, planetAt, beltSpeed, extractorRate, craftTime,
+  opposite, orderAt, planetAt, minRate, beltSpeed, extractorRate, craftTime,
 } from './defs.js';
 import { key } from './world.js';
 
@@ -55,7 +55,6 @@ export function tryInsert(state, x, y, type, dir) {
 // Llega algo a la nave. Solo cuenta lo que pide el pedido actual y, si el pedido
 // pide un ritmo, solo mientras llegue a ese ritmo (medido en los últimos segundos).
 // Lo demás Chatarrex se lo queda "por si acaso".
-const RATE_TOLERANCE = 0.9; // un pelín de margen por los saltos de las cintas
 function deliver(state, type) {
   state.delivered[type] = (state.delivered[type] || 0) + 1;
   const order = orderAt(state.planet || 0, state.orderIndex);
@@ -65,11 +64,12 @@ function deliver(state, type) {
     const from = state.tick - RATE_SECONDS * TICK_RATE;
     while (hits.length && hits[0] <= from) hits.shift();
     const rate = hits.length / RATE_SECONDS;
-    if (!order.rate || rate >= order.rate * RATE_TOLERANCE) {
+    const min = minRate(order);
+    if (!min || rate >= min - 1e-9) {
       state.orderProgress++;
     } else if (!state.slowWarned) {
       state.slowWarned = true;
-      state.events.push({ type: 'tooSlow', rate: order.rate });
+      state.events.push({ type: 'tooSlow', rate: min });
     }
     if (state.orderProgress >= order.amount) {
       const unlocked = [];

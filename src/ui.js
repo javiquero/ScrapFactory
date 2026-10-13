@@ -1,6 +1,6 @@
 // Interfaz en HTML por encima del lienzo: pedido, barra rápida, catálogo, comunicados.
 
-import { BUILDINGS, CATEGORIES, ITEMS, PLANETS, MACHINE_BUFFER, beltRate, extractorRate, craftTime, unlockedBy } from './defs.js';
+import { BUILDINGS, CATEGORIES, ITEMS, PLANETS, MACHINE_BUFFER, beltRate, extractorRate, craftTime, unlockedBy, minRate } from './defs.js';
 import { currentOrder, hasNextPlanet, orderRate } from './state.js';
 import { shipText } from './messages.js';
 
@@ -109,7 +109,7 @@ export class UI {
     if (!rates.length) html += '<p class="snote">Todavía no llega nada. La nave espera, la junta también.</p>';
     for (const [item, r] of rates) {
       const want = item === o.item;
-      html += `<div class="srow ${want ? 'want' : ''}">${icon('item_' + item)}<span class="sname">${ITEMS[item].name}${want && o.rate ? ` <small>(pedido: mín. ${num(o.rate)}/s)</small>` : ''}</span><span class="sval">${num(r)}/s</span></div>`;
+      html += `<div class="srow ${want ? 'want' : ''}">${icon('item_' + item)}<span class="sname">${ITEMS[item].name}${want && o.rate ? ` <small>(pedido: mín. ${num(minRate(o))}/s)</small>` : ''}</span><span class="sval">${num(r)}/s</span></div>`;
     }
     // máquinas: cuántas hay de cada tipo y cuántas están trabajando ahora
     const count = {};
@@ -225,8 +225,9 @@ export class UI {
     const r = $('orderRate');
     r.hidden = !o.rate;
     if (o.rate) {
-      const ok = rate >= o.rate * 0.9;
-      r.textContent = `Ritmo ${num(rate)}/s · mín. ${num(o.rate)}/s${ok ? ' ✓' : ' · no cuenta'}`;
+      const min = minRate(o);
+      const ok = rate >= min - 1e-9;
+      r.textContent = `Ritmo ${num(rate)}/s · mín. ${num(min)}/s${ok ? ' ✓' : ' · no cuenta'}`;
       r.classList.toggle('slow', !ok);
     }
     const canLaunch = state.planetDone && hasNextPlanet(state);

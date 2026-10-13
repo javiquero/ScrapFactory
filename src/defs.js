@@ -183,6 +183,11 @@ export const lineRate = (item) => (MAKER[item] ? 1 / BUILDINGS[MAKER[item]].reci
 // Ventana en la que se mide el ritmo de un pedido
 export const RATE_SECONDS = 10;
 
+// Ritmo mínimo que de verdad se exige (y el que se enseña): el de las líneas pedidas
+// con un 10 % de margen por los saltos de las cintas, redondeado hacia abajo a 0,1.
+// Así una fábrica montada justa siempre llega, y lo que ves es exactamente lo que cuenta.
+export const minRate = (order) => (order && order.rate ? Math.floor(order.rate * 0.9 * 10 + 1e-9) / 10 : 0);
+
 // Un pedido: `amount` piezas de `item`, llegando a la nave al menos a `rate` por segundo
 // (lo que llega más despacio no cuenta). `lines` = cuántas líneas hacen falta para ese
 // ritmo (0 = sin mínimo). Al cumplirlo se desbloquean las máquinas de `unlocks`.

@@ -13,7 +13,7 @@ Montar una cadena y esperar aburre. El reto está en **volver a resolver la log�
 
 - Cada pedido: `item`, `amount`, `rate` (piezas/s mínimas, medidas en los últimos 10 s; 0 = sin mínimo) y `unlocks`.
 - El ritmo se expresa en **líneas**: `lines × lineRate(item)`, donde una línea es lo que saca una máquina (o un extractor, si es en bruto). La cantidad suele ser ritmo × 1–4 minutos.
-- Se tolera un 10 % por debajo del mínimo por los saltos de las cintas.
+- El mínimo que se exige y se enseña es `minRate`: las líneas pedidas con un 10 % de margen (por los saltos de las cintas), redondeado hacia abajo a 0,1. Lo que pone la etiqueta es exactamente lo que cuenta, y con una línea menos nunca se llega (lo comprueba una prueba).
 - Si no llegas al ritmo, la etiqueta del pedido lo dice en rojo y Chatarrex avisa una vez.
 - Prueba: todos los pedidos de los 8 planetas se pueden hacer con lo desbloqueado hasta ese momento, y todos los ritmos caben por las 8 bocas de la nave.
 - Idea para más adelante: **modo difícil** al terminar el último planeta, con recursos que se agotan.

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createGame as createGame0, applyAction, serialize, deserialize, currentOrder, isShip } from '../src/state.js';
 import { step, tryInsert } from '../src/sim.js';
 import { key, generateWorld } from '../src/world.js';
-import { TICK_RATE, beltRate, extractorRate, PLANETS, BUILDINGS, ITEMS, NODES, LEVEL_MULT, MAKER, STARTING_UNLOCKS, unlockedBy } from '../src/defs.js';
+import { TICK_RATE, beltRate, extractorRate, PLANETS, BUILDINGS, ITEMS, NODES, LEVEL_MULT, MAKER, STARTING_UNLOCKS, unlockedBy, minRate, lineRate } from '../src/defs.js';
 
 // Máquinas que hacen falta para fabricar `item` (toda la cadena)
 function machinesFor(item, acc = new Set()) {
@@ -489,6 +489,12 @@ for (const lvl of [1]) {   // sin niveles de momento
         used.add(m);
       }
       assert.ok(o.rate <= 8 * beltRate(), `planeta ${p + 1}: ritmo ${o.rate}/s no cabe por la nave`);
+      if (o.rate) {
+        // el mínimo que se enseña y se exige: lo da el número de líneas pedido, y con una menos no se llega
+        const lines = Math.round(o.rate / lineRate(o.item));
+        assert.ok(minRate(o) <= lines * lineRate(o.item) + 1e-9, `planeta ${p + 1}, ${o.item}: ${lines} líneas no llegan a ${minRate(o)}`);
+        if (lines > 1) assert.ok((lines - 1) * lineRate(o.item) < minRate(o), `planeta ${p + 1}, ${o.item}: con ${lines - 1} líneas ya bastaría`);
+      }
       for (const u of o.unlocks) have.add(u);
     });
   });
