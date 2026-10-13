@@ -291,7 +291,12 @@ export class UI {
   // Divisor: botones para abrir/cerrar cada salida, con la flecha hacia donde sale en pantalla
   renderOuts(e) {
     const box = $('inspectOuts');
-    if (!e || e.kind !== 'divisor') { box.hidden = true; return; }
+    if (!e || e.kind !== 'divisor') { box.hidden = true; this.outsKey = ''; return; }
+    // Solo se repinta si algo cambió: si se rehace el botón entre que pulsas y sueltas
+    // el ratón, el navegador no da el clic (en táctil casi no se notaba)
+    const key = `${e.id}:${e.dir}:${(e.outs || []).join()}`;
+    if (key === this.outsKey && !box.hidden) return;
+    this.outsKey = key;
     const ARROW = ['→', '↓', '←', '↑'];
     const dirs = [(e.dir + 3) % 4, e.dir, (e.dir + 1) % 4];
     const outs = e.outs || [true, true, true];
