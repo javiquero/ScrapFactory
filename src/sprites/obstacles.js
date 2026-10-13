@@ -153,39 +153,15 @@ const P0 = {
     moss(g, rnd, k.cx - 4, k.cy - 7, 7);
     moss(g, rnd, 46, 33, 5);
   },
-  // Bloque de chatarra prensada: imposible de mover
+  // Peñasco plano y oscuro, partido en dos, con musgo
   c(g, s) {
     const rnd = prng(303);
-    s.roundRect(7, 9, 56, 54, 6).fill({ color: SHADOW, alpha: 0.45 });
-    g.roundRect(3, 3, 58, 57, 7).fill(0x5f5a52).stroke({ width: 2.4, color: INK });
-    // mosaico de chapas aplastadas (rejilla deformada que llena la cara de arriba)
-    const x0 = 5, y0 = 4, w = 52, h = 51, n = 4;
-    const V = [];
-    for (let j = 0; j <= n; j++) {
-      V.push([]);
-      for (let i = 0; i <= n; i++) {
-        const edgeX = i === 0 || i === n, edgeY = j === 0 || j === n;
-        V[j].push([x0 + (w * i) / n + (edgeX ? 0 : (rnd() - 0.5) * 9), y0 + (h * j) / n + (edgeY ? 0 : (rnd() - 0.5) * 9)]);
-      }
-    }
-    const cols = [C.RUST, C.STEEL, C.METAL, C.MINT, C.BUTTER, C.RUST_D, C.STEEL_D, C.LILAC, C.METAL_D];
-    for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
-      const col = cols[Math.floor(rnd() * cols.length)];
-      const q = [V[j][i], V[j][i + 1], V[j + 1][i + 1], V[j + 1][i]];
-      g.poly(q.flat()).fill(grad([[0, mix(col, 0xffffff, 0.35)], [1, mix(col, 0x000000, 0.15)]], 0, 0, 1, 1)).stroke({ width: 1.3, color: INK, alpha: 0.8 });
-      const [mx, my] = centroid(q);
-      line(g, mx - 4, my - 2 + rnd() * 3, mx + 4, my + rnd() * 3, 1, INK, 0.35); // arruga
-    }
-    rustStain(g, 18, 40, 4);
-    rustStain(g, 44, 16, 3, 0.45);
-    // flejes de acero que lo atan
-    for (const x of [19, 41]) {
-      g.rect(x - 3, 3, 6, 54).fill(C.STEEL_D).stroke({ width: 1.5, color: INK });
-      line(g, x - 1.5, 4, x - 1.5, 56, 1, C.STEEL_L, 0.8);
-      rivet(g, x, 9, 1.8); rivet(g, x, 50, 1.8);
-    }
-    g.roundRect(3, 3, 58, 54, 7).stroke({ width: 2.4, color: INK });
-    line(g, 6, 6, 58, 6, 1.5, 0xffffff, 0.35);
+    const SLAB = [0xcfd2c6, 0x8e9286, 0x5a5e54];
+    rock(g, s, rnd, 22, 33, 20, 27, SLAB, { cracks: 2, n: 9 });
+    const k = rock(g, s, rnd, 44, 31, 18, 26, [0xd9dbd0, 0x979b8f, 0x60645a], { cracks: 1, n: 9 });
+    moss(g, rnd, 20, 15, 8);
+    moss(g, rnd, k.cx + 3, k.cy + 12, 6);
+    moss(g, rnd, 12, 46, 5);
   },
 };
 
