@@ -1,6 +1,7 @@
-// Sonido de Scrap Factory: todo sintetizado con Web Audio, sin archivos.
-// Estilo "chatarra simpática": clacs metálicos amables, una música de fondo
-// generativa muy flojita y el rumor de las máquinas según cuánto trabajan.
+// Sonido de Scrap Factory: efectos y máquinas sintetizados con Web Audio;
+// la música son pistas lo-fi de dominio público (assets/music).
+// Estilo "chatarra simpática": clacs metálicos amables, música muy flojita
+// y el rumor de las máquinas según cuánto trabajan.
 // Nada de esto toca el estado de la partida: es solo presentación (por eso
 // aquí sí se puede usar Math.random).
 //
@@ -15,7 +16,7 @@
 const CLAVE_MUTE = 'scrapfactory.muted';
 const CLAVE_MUSICA = 'scrapfactory.music';
 const VOLUMEN_MAESTRO = 0.55;
-const VOLUMEN_MUSICA = 0.6;     // ganancia del bus de música (las voces ya son flojas)
+const VOLUMEN_MUSICA = 0.22;    // ganancia de la música (pistas ya normalizadas a -18 LUFS): flojita
 const VOLUMEN_RUMOR = 0.05;     // rumor de fábrica a nivel 1
 const VOLUMEN_CLANC = 0.045;    // golpes mecánicos sueltos
 const ANTICIPACION = 1.2;       // segundos que se programan por adelantado
@@ -296,212 +297,69 @@ const SONIDOS = {
 };
 
 // =====================================================================
-// Música de fondo generativa
+// Música de fondo: pistas lo-fi de dominio público (CC0, colección
+// "Open Lo-Fi", ver assets/music/README.md). Se reproducen en orden
+// aleatorio, muy flojitas, con fundido al empezar y al parar. Pasan por el
+// volumen maestro, así que el silencio general también las calla.
 // =====================================================================
-// Pad de acordes muy suave (4 acordes, ~8 s cada uno) y encima notas sueltas
-// tipo marimba de una pentatónica, a intervalos irregulares, con eco suave.
-// Cada pocos acordes cambia la progresión, el registro, o hay silencios.
-
-// Acordes en notas MIDI (voicing grave y cerrado) + escala para la melodía.
-const PENTA_MAYOR = [0, 2, 4, 7, 9];      // C D E G A
-const PENTA_MIXO = [0, 2, 5, 7, 10];      // C D F G Bb
-const PROGRESIONES = [
-  // Cmaj7 - Am7 - Fmaj7 - G6
-  [[48, 55, 59, 64], [45, 52, 55, 60], [41, 48, 52, 57], [43, 50, 52, 59]].map((n) => ({ n, e: PENTA_MAYOR })),
-  // Cadd9 - Bb - Fadd9 - C (sabor mixolidio)
-  [
-    { n: [48, 55, 62, 64], e: PENTA_MAYOR }, { n: [46, 53, 58, 62], e: PENTA_MIXO },
-    { n: [41, 48, 55, 57], e: PENTA_MIXO }, { n: [48, 52, 55, 60], e: PENTA_MAYOR },
-  ],
-  // Fmaj7 - G - Em7 - Am7
-  [[41, 48, 52, 57], [43, 50, 55, 59], [40, 47, 50, 55], [45, 52, 55, 60]].map((n) => ({ n, e: PENTA_MAYOR })),
+const PISTAS = [
+  'assets/music/soft-gold-sky.mp3',
+  'assets/music/window-seat-daydream.mp3',
+  'assets/music/porchlight-golden-hour.mp3',
+  'assets/music/dust-on-the-morning-keys.mp3',
 ];
+let pista = null;        // <audio> reutilizable
+let busMusica = null;    // GainNode de la música
+let orden = [];          // cola barajada de pistas
+
+function siguientePista() {
+  if (!orden.length) {
+    orden = PISTAS.slice();
+    for (let i = orden.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [orden[i], orden[j]] = [orden[j], orden[i]]; }
+  }
+  return orden.shift();
+}
 
 function arrancarMusica() {
   if (musica || !ctx) return;
   try {
+    if (!pista) {
+      pista = new Audio();
+      pista.preload = 'auto';
+      pista.addEventListener('ended', () => {
+        if (!musica) return;
+        pista.src = siguientePista();
+        pista.play().catch(() => {});
+      });
+      busMusica = ctx.createGain();
+      busMusica.gain.value = 0;
+      ctx.createMediaElementSource(pista).connect(busMusica);
+      busMusica.connect(maestro);
+    }
+    if (!pista.src) pista.src = siguientePista();
     const t0 = ctx.currentTime;
-    const bus = ctx.createGain();
-    bus.gain.setValueAtTime(0, t0);
-    bus.gain.setTargetAtTime(VOLUMEN_MUSICA, t0, 1.5);
-    bus.connect(maestro);
-
-    // Pad: un paso bajo común para que quede aterciopelado.
-    const padFiltro = ctx.createBiquadFilter();
-    padFiltro.type = 'lowpass';
-    padFiltro.frequency.value = 900;
-    padFiltro.Q.value = 0.5;
-    padFiltro.connect(bus);
-
-    // Eco suave para las campanitas: delay con realimentación baja y oscura.
-    const envio = ctx.createGain();
-    envio.gain.value = 0.35;
-    const eco = ctx.createDelay(2);
-    eco.delayTime.value = 0.42;
-    const ecoFiltro = ctx.createBiquadFilter();
-    ecoFiltro.type = 'lowpass';
-    ecoFiltro.frequency.value = 2200;
-    const realim = ctx.createGain();
-    realim.gain.value = 0.28;
-    envio.connect(eco);
-    eco.connect(ecoFiltro);
-    ecoFiltro.connect(realim);
-    realim.connect(eco);
-    ecoFiltro.connect(bus);
-
-    musica = {
-      bus, padFiltro, envio,
-      nodos: [bus, padFiltro, envio, eco, ecoFiltro, realim],
-      fuentes: new Set(),
-      prog: elegir(PROGRESIONES),
-      idx: 0,
-      vueltas: 0,
-      proxAcorde: t0 + 0.3,
-      acordeActual: null,
-      finAcorde: t0 + 0.3,
-      proxNota: t0 + azar(2, 4),
-      silencioHasta: 0,
-      registro: 12,         // desplazamiento de la melodía sobre C4
-      cambioRegistro: 3,    // acordes hasta el próximo cambio de registro
-      ultimoGrado: 2,
-    };
+    busMusica.gain.cancelScheduledValues(t0);
+    busMusica.gain.setValueAtTime(busMusica.gain.value, t0);
+    busMusica.gain.setTargetAtTime(VOLUMEN_MUSICA, t0, 1.5);
+    pista.play().catch(() => {});
+    musica = { pista };
   } catch { musica = null; }
-}
-
-// Registra una fuente de la música para poder pararla y limpiarla.
-function fuenteMusica(m) {
-  return (src) => {
-    m.fuentes.add(src);
-    const prev = src.onended;
-    src.onended = (e) => { m.fuentes.delete(src); if (prev) prev.call(src, e); };
-  };
 }
 
 function pararMusica() {
   if (!musica) return;
-  const m = musica;
   musica = null;
   try {
     const t0 = ctx.currentTime;
-    m.bus.gain.cancelScheduledValues(t0);
-    m.bus.gain.setValueAtTime(m.bus.gain.value, t0);
-    m.bus.gain.linearRampToValueAtTime(0, t0 + 1.2);
-    for (const f of m.fuentes) { try { f.stop(t0 + 1.3); } catch { /* ya parada */ } }
+    busMusica.gain.cancelScheduledValues(t0);
+    busMusica.gain.setValueAtTime(busMusica.gain.value, t0);
+    busMusica.gain.linearRampToValueAtTime(0, t0 + 1.2);
+    setTimeout(() => { if (!musica && pista) pista.pause(); }, 1300);
   } catch { /* nada */ }
-  // El eco tiene un lazo de realimentación: hay que desconectarlo a mano.
-  setTimeout(() => {
-    for (const nd of m.nodos) { try { nd.disconnect(); } catch { /* ya estaba */ } }
-  }, 2500);
 }
 
-// Una voz de pad: dos osciladores suaves con ataque y relajación largos.
-function vozPad(m, f, at, dur, vol) {
-  const registrar = fuenteMusica(m);
-  const g = ctx.createGain();
-  g.gain.setValueAtTime(0.0001, at);
-  g.gain.linearRampToValueAtTime(vol, at + 2.5);
-  g.gain.setValueAtTime(vol, at + dur - 3);
-  g.gain.linearRampToValueAtTime(0.0001, at + dur);
-  g.connect(m.padFiltro);
-  const o1 = ctx.createOscillator();
-  o1.type = 'triangle';
-  o1.frequency.value = f;
-  const o2 = ctx.createOscillator();
-  o2.type = 'sine';
-  o2.frequency.value = f;
-  o2.detune.value = azar(4, 8);
-  o1.connect(g);
-  o2.connect(g);
-  alAcabar(o1, [o1, g]);
-  alAcabar(o2, [o2]);
-  registrar(o1);
-  registrar(o2);
-  o1.start(at); o2.start(at);
-  o1.stop(at + dur + 0.05); o2.stop(at + dur + 0.05);
-}
-
-// Programa un acorde (pad + bajo suave).
-function programarAcorde(m, at) {
-  // Cada vuelta completa puede cambiar de progresión.
-  if (m.idx === 0 && m.vueltas > 0 && Math.random() < 0.5) m.prog = elegir(PROGRESIONES);
-  const acorde = m.prog[m.idx];
-  m.acordeActual = acorde;
-  m.finAcorde = at + DUR_ACORDE;
-  const dur = DUR_ACORDE + 2.5; // se solapa con el siguiente
-
-  const r = Math.random();
-  if (r < 0.08) {
-    // Respiro: este acorde el pad descansa.
-  } else if (r < 0.2) {
-    // Versión ligera: solo fundamental y quinta.
-    vozPad(m, midiHz(acorde.n[0]), at, dur, 0.009);
-    vozPad(m, midiHz(acorde.n[1]), at, dur, 0.008);
-  } else {
-    for (const n of acorde.n) vozPad(m, midiHz(n), at, dur, 0.011);
-  }
-  // Bajo muy suave de vez en cuando.
-  if (Math.random() < 0.6) {
-    fuenteMusica(m)(tono({
-      tipo: 'sine', f: midiHz(acorde.n[0] - 12), at, dur: 5, vol: 0.025, ataque: 0.8,
-      destino: m.bus,
-    }));
-  }
-
-  // Variaciones: silencios de melodía y cambios de registro.
-  if (Math.random() < 0.22) m.silencioHasta = m.finAcorde;
-  if (--m.cambioRegistro <= 0) {
-    m.registro = elegir([0, 12, 12, 24]);
-    m.cambioRegistro = 2 + Math.floor(Math.random() * 4);
-  }
-  m.idx = (m.idx + 1) % m.prog.length;
-  if (m.idx === 0) m.vueltas++;
-}
-
-// Una nota tipo marimba/campanita: fundamental + parcial ~4x que se apaga antes.
-function notaMarimba(m, f, at, vol) {
-  const registrar = fuenteMusica(m);
-  const salida = ctx.createGain();
-  salida.gain.value = 1;
-  salida.connect(m.bus);
-  salida.connect(m.envio);
-  const fin = () => { try { salida.disconnect(); } catch { /* ya estaba */ } };
-  registrar(tono({ tipo: 'sine', f, at, dur: 1.1, vol, ataque: 0.008, destino: salida, fin }));
-  registrar(tono({ tipo: 'sine', f: f * 3.98, at, dur: 0.18, vol: vol * 0.18, ataque: 0.004, destino: salida }));
-  registrar(tono({ tipo: 'triangle', f: f * 2, at, dur: 0.5, vol: vol * 0.15, ataque: 0.006, destino: salida }));
-}
-
-function programarNota(m, at) {
-  if (at >= m.silencioHasta && m.acordeActual) {
-    const escala = m.acordeActual.e;
-    // Paseo por la escala: pasos cortos, sin grandes saltos.
-    const paso = elegir([-2, -1, -1, 0, 1, 1, 2]);
-    m.ultimoGrado = Math.max(0, Math.min(9, m.ultimoGrado + paso));
-    const g = m.ultimoGrado;
-    const midi = 60 + m.registro + escala[g % 5] + 12 * Math.floor(g / 5) - 12;
-    notaMarimba(m, midiHz(midi), at, azar(0.022, 0.034));
-  }
-  // Siguiente nota a un intervalo irregular: sueltas, frasecitas y pausas.
-  const r = Math.random();
-  let hueco;
-  if (r < 0.3) hueco = azar(0.28, 0.5);       // frasecita
-  else if (r < 0.88) hueco = azar(0.9, 2.6);  // nota suelta
-  else hueco = azar(3.5, 7);                  // pausa larga
-  m.proxNota = at + hueco;
-}
-
-function tickMusica(ahora) {
-  const m = musica;
-  if (!m) return;
-  // Si el contexto estuvo parado y nos quedamos atrás, recolocar.
-  if (m.proxAcorde < ahora - 1) m.proxAcorde = ahora + 0.1;
-  if (m.proxNota < ahora - 1) m.proxNota = ahora + 0.5;
-  const limite = ahora + ANTICIPACION;
-  while (m.proxAcorde < limite) {
-    programarAcorde(m, m.proxAcorde);
-    m.proxAcorde += DUR_ACORDE;
-  }
-  while (m.proxNota < limite) programarNota(m, m.proxNota);
-}
+// La música va sola (es un archivo): no hay nada que programar.
+function tickMusica() {}
 
 // =====================================================================
 // Sonido de máquinas según la actividad
@@ -652,18 +510,18 @@ function actualizarFondo() {
 // ANTICIPACION segundos usando el reloj del contexto (preciso aunque el
 // temporizador vaya con retraso). Se detiene solo cuando no hay nada.
 function asegurarTick() {
-  if (timer === null && (musica || maquinas)) timer = setTimeout(tick, 0);
+  if (timer === null && maquinas) timer = setTimeout(tick, 0);
 }
 
 function tick() {
   timer = null;
-  if (!ctx || (!musica && !maquinas)) return;
+  if (!ctx || !maquinas) return;
   try {
     const ahora = ctx.currentTime;
     tickMusica(ahora);
     tickMaquinas(ahora);
   } catch { /* nada */ }
-  if (musica || maquinas) timer = setTimeout(tick, CADA_TICK);
+  if (maquinas) timer = setTimeout(tick, CADA_TICK);
 }
 
 // Con la pestaña oculta se suspende el contexto (ahorra batería en el móvil).
